@@ -10,9 +10,11 @@
 #include <errno.h>
 #include <ctype.h>
 #include <signal.h>
+#include <math.h>
+#include <time.h>
 
 #define MAX_CLIENTS 1000
-#define MAX_REQUESTS_PER_SECOND 10
+#define MAX_REQUESTS_PER_SECOND 100
 #define BAN_TIME 60
 #define PORT 8081
 #define FORWARD_PORT 8082 
@@ -20,21 +22,31 @@
 #define BUFFER_SIZE 1024
 #define MAX_PASSWORD_LEN 256
 #define THRESHOLD 5
+#define INITIAL_RATE_LIMIT 10.0
+#define MAX_LEGIT_RATE 50.0
+#define ALPHA 0.2
 
 struct dnnsec_entry {
     char domain[100];
     char ip[16];
     unsigned char *signature;
     size_t sig_len;
-}
+};
 
 typedef struct {
     char ip[INET_ADDRSTRLEN];
     int count;
     time_t last_request;
+    time_t last_update;
+    double request_rate;
     time_t banned_until;
     int is_banned;
 } ClientInfo;
+
+typedef struct {
+    char data[BUFFER_SIZE];
+    size_t len;
+} Packet;
 
 Packet packet_buffer[THRESHOLD];
 size_t packet_count = 0;
@@ -42,6 +54,50 @@ size_t packet_count = 0;
 ClientInfo clients[MAX_CLIENTS];
 pthread_mutex_t lock;
 volatile sig_atomic_t running = 1;
+
+ClientInfo* find_or_create_client(const char *ip) {
+    for (int i = 0; i < MAX_CLIENTS; i++) {
+        if (strcmp(clients[i].ip, ip) == 0) {
+            return &clients[i];
+        }
+    }
+    
+    for (int i = 0; i < MAX_CLIENTS; i++) {
+        if (clients[i].count == 0) {
+            strncpy(clients[i].ip, ip, INET_ADDRSTRLEN-1);
+            clients[i].ip[INET_ADDRSTRLEN-1] = '\0';
+            clients[i].count = 0;
+            clients[i].last_update = time(NULL);
+            return &clients[i];
+        }
+    }
+    return NULL;
+}
+
+void update_rate(ClientInfo *client) {
+    time_t now = time(NULL);
+    double elapsed = difftime(now, client->last_update);
+
+    if (elapsed > 0) {
+        double instant_rate = 1.0 / elapsed;
+        client->request_rate = ALPHA * instant_rate + (1 - ALPHA) * client->request_rate;
+    }
+    
+    client->last_update = now;
+}
+
+int check_rate_limiting(ClientInfo *client) {
+    update_rate(client);
+
+    double dynamic_limit = INITIAL_RATE_LIMIT;
+
+    if (client->request_rate > dynamic_limit &&
+        client->request_rate < MAX_LEGIT_RATE) {
+        return 1;
+    }
+
+    return 0;
+}
 
 void handle_signal(int sig) {
     running = 0;
@@ -154,16 +210,22 @@ int forward_data(int client_socket, const char* buffer, size_t buffer_len) {
     }
 
     if (packet_count < THRESHOLD) {
-        memcpy(&packet_buffer[packet_count], buffer, buffer_len);
+        memcpy(packet_buffer[packet_count].data, buffer, buffer_len);
+        packet_buffer[packet_count].len = buffer_len;
         packet_count++;
+        close(forward_sock);
         return 0; 
     }
 
+    ssize_t total_sent = 0;
     for (int i = 0; i < THRESHOLD; i++) {
-        ssize_t sent = send(forward_sock, buffer, buffer_len, 0);
+        ssize_t sent = send(forward_sock, packet_buffer[i].data, packet_buffer[i].len, 0);
+        if (sent > 0) {
+            total_sent += sent;
+        }
     }
     
-    if (sent < 0) {
+    if (total_sent <= 0) {
         perror("Forward send failed");
         close(forward_sock);
         return -1;
@@ -175,6 +237,19 @@ int forward_data(int client_socket, const char* buffer, size_t buffer_len) {
 }
 
 void handle_client(int client_socket, const char* client_ip) {
+    ClientInfo *client = find_or_create_client(client_ip);
+    if (!client) {
+        send(client_socket, "Server overload", 15, 0);
+        close(client_socket);
+        return;
+    }
+
+    if (check_rate_limiting(client)) {
+        send(client_socket, "Rate limit exceeded", 18, 0);
+        close(client_socket);
+        return;
+    }
+
     char buffer[BUFFER_SIZE] = {0};
     ssize_t bytes_read = recv(client_socket, buffer, BUFFER_SIZE-1, 0);
     
@@ -218,6 +293,7 @@ int main() {
     signal(SIGINT, handle_signal);
     signal(SIGTERM, handle_signal);
 
+    memset(clients, 0, sizeof(clients));
     pthread_mutex_init(&lock, NULL);
     pthread_t checker_thread;
     pthread_create(&checker_thread, NULL, check_connections, NULL);
