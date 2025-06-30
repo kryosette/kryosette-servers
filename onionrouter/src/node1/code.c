@@ -1,58 +1,9 @@
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <unistd.h>
-#include <sys/socket.h>
-#include <netinet/in.h>
-#include <jansson.h>
-#include <pthread.h>
-#include <arpa/inet.h>
-#include <errno.h>
-#include <ctype.h>
-#include <signal.h>
-#include <math.h>
-#include <time.h>
-
-#define MAX_CLIENTS 1000
-#define MAX_REQUESTS_PER_SECOND 100
-#define BAN_TIME 60
-#define PORT 8081
-#define FORWARD_PORT 8082 
-#define FORWARD_IP "127.0.0.1" 
-#define BUFFER_SIZE 1024
-#define MAX_PASSWORD_LEN 256
-#define THRESHOLD 5
-#define INITIAL_RATE_LIMIT 10.0
-#define MAX_LEGIT_RATE 50.0
-#define ALPHA 0.2
-
-struct dnnsec_entry {
-    char domain[100];
-    char ip[16];
-    unsigned char *signature;
-    size_t sig_len;
-};
-
-typedef struct {
-    char ip[INET_ADDRSTRLEN];
-    int count;
-    time_t last_request;
-    time_t last_update;
-    double request_rate;
-    time_t banned_until;
-    int is_banned;
-} ClientInfo;
-
-typedef struct {
-    char data[BUFFER_SIZE];
-    size_t len;
-} Packet;
+#include "code.h"
 
 Packet packet_buffer[THRESHOLD];
 size_t packet_count = 0;
-
-ClientInfo clients[MAX_CLIENTS];
-pthread_mutex_t lock;
+ClientInfo clients[MAX_CLIENTS] = {0};
+pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER;
 volatile sig_atomic_t running = 1;
 
 ClientInfo* find_or_create_client(const char *ip) {
@@ -73,6 +24,39 @@ ClientInfo* find_or_create_client(const char *ip) {
     }
     return NULL;
 }
+
+void secure_pad(unsigned char *data, size_t *current_len, size_t max_len, int mode) {
+    size_t target_len;
+
+    switch (mode) {
+        case 0: //fixed size
+            target_len = max_len;
+            break;
+        case 1: // random padding (50-100% of max_len)
+            RAND_bytes((unsigned char *)&target_len, sizeof(target_len));
+            target_len = *current_len + (target_len % (max_len - *current_len + 1));
+            break; 
+        case 2:
+            target_len = max_len;
+            const char *http_headers = "\r\nX-Padding: a1b2c3d4\r\n";
+            size_t http_pad_len = strlen(http_headers);
+            if (*current_len + http_pad_len <= max_len) {
+                memcpy(data + *current_len, http_headers, http_pad_len);
+                *current_len += http_pad_len;
+            }
+            return;
+    }
+    if (target_len <= *current_len) return;
+
+    RAND_bytes(data + *current_len, target_len - *current_len);
+    *current_len = target_len;
+}
+
+void handle_crypto_error(const char *msg) {
+    fprintf(stderr, "Crypto error: %s\n", msg);
+    exit(1);
+}
+
 
 void update_rate(ClientInfo *client) {
     time_t now = time(NULL);
@@ -156,7 +140,7 @@ void log_request(const char* ip) {
             if (clients[i].count == 0) {
                 strncpy(clients[i].ip, ip, INET_ADDRSTRLEN-1);
                 clients[i].ip[INET_ADDRSTRLEN-1] = '\0';
-                clients[i].count = 1;
+                clients[i].count = 1; 
                 clients[i].last_request = now;
                 clients[i].banned_until = 0;
                 clients[i].is_banned = 0;
@@ -289,6 +273,7 @@ void handle_client(int client_socket, const char* client_ip) {
     close(client_socket);
 }
 
+#ifndef TESTING
 int main() {
     signal(SIGINT, handle_signal);
     signal(SIGTERM, handle_signal);
@@ -360,3 +345,4 @@ int main() {
     pthread_mutex_destroy(&lock);
     return 0;
 }
+#endif
