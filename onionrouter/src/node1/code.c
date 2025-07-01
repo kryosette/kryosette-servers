@@ -25,6 +25,67 @@ ClientInfo* find_or_create_client(const char *ip) {
     return NULL;
 }
 
+/*
+A={x1,x2,…,xk} 
+The alphabet, i.e., the set of all possible symbols that a (digitized) noise
+source produces.
+
+H
+The min-entropy of the samples from a (digitized) noise source or of the
+output from an entropy source; the min-entropy assessment for a noise
+source or entropy source
+
+pi 
+The probability for an observation (or occurrence) of the symbol xi in A.
+*/
+
+/* 
+*Min-Entropy*
+
+❗Min-entropy measures predictability—it tells you how easily an attacker can guess the 
+                        most likely outcome of a random process.
+
+Entropy is defined relative to one’s knowledge of an experiment’s output prior to observation, 
+and reflects the uncertainty associated with predicting its value – the larger the amount of entropy, 
+the greater the uncertainty in predicting the value of an observation.
+
+                                - Probabilty -
+The probability that a secret is guessed correctly in the first trial is related to the 
+min-entropy of the distribution that the secret was generated from.
+
+The min-entropy of an independent discrete random variable X that takes values from the set
+A={x1,x2,…,xk} with probability Pr(X=xi) = pi for i =1,…,k is defined as
+
+                                𝐻 = min (−log2 p𝑖),
+                                    1≤𝑖≤𝑘
+                                = − log2 max p𝑖.
+                                        1≤𝑖≤𝑘 
+
+*/
+
+void max_secure_rand(unsigned char *buf, size_t len) {
+    // Try hardware RNG first (Intel/AMD)
+    #ifdef __x86_64__
+    for (size_t i = 0; i < len; i += sizeof(unsigned long long)) {
+        unsigned long long rand_val;
+        if (_rdseed64_step(&rand_val) == 1) {  // Prefer RDSEED (true entropy)
+            memcpy(buf + i, &rand_val, 
+                  (len - i) > sizeof(rand_val) ? sizeof(rand_val) : (len - i));
+        } 
+        else if (_rdrand64_step(&rand_val) == 1) {  // Fallback to RDRAND
+            memcpy(buf + i, &rand_val, 
+                  (len - i) > sizeof(rand_val) ? sizeof(rand_val) : (len - i));
+        } 
+        else break;
+    }
+    #endif
+
+    // Fallback to OS RNG if hardware RNG fails or not available
+    if (RAND_bytes(buf, len) != 1) {
+        abort();  // Catastrophic failure
+    }
+}
+
 void secure_pad(unsigned char *data, size_t *current_len, size_t max_len, int mode) {
     size_t target_len;
 
@@ -32,10 +93,16 @@ void secure_pad(unsigned char *data, size_t *current_len, size_t max_len, int mo
         case 0: //fixed size
             target_len = max_len;
             break;
-        case 1: // random padding (50-100% of max_len)
-            RAND_bytes((unsigned char *)&target_len, sizeof(target_len));
-            target_len = *current_len + (target_len % (max_len - *current_len + 1));
-            break; 
+        case 1:  // Random padding (50-100% of max_len)
+            // Use max_secure_rand instead of RAND_bytes
+            max_secure_rand((unsigned char *)&target_len, sizeof(target_len));
+            
+            // Calculate random padding length safely
+            size_t available_space = max_len - *current_len;
+            if (available_space == 0) return;  // No space left
+            
+            target_len = *current_len + (target_len % (available_space + 1));
+            break;
         case 2:
             target_len = max_len;
             const char *http_headers = "\r\nX-Padding: a1b2c3d4\r\n";
@@ -48,7 +115,7 @@ void secure_pad(unsigned char *data, size_t *current_len, size_t max_len, int mo
     }
     if (target_len <= *current_len) return;
 
-    RAND_bytes(data + *current_len, target_len - *current_len);
+    max_secure_rand(data + *current_len, target_len - *current_len);
     *current_len = target_len;
 }
 

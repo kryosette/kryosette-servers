@@ -15,6 +15,8 @@
 #include <signal.h>
 #include <math.h>
 #include <time.h>
+#include <immintrin.h>
+#include <openssl/rand.h> 
 
 // Константы
 #define MAX_CLIENTS 1000
