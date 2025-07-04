@@ -1,5 +1,39 @@
 #include "code.h"
 
+SSL_CTX *create_ssl_context(const char *cert_path, const char *key_path) {
+    SSL_CTX *ctx;
+
+    SSL_library_init();
+    OpenSSL_add_all_algorithms();
+    SSL_load_error_strings();
+
+    ctx = SSL_CTX_new(TLS_server_method());
+    if (!ctx) {
+        ERR_print_errors_fp(stderr);
+        return NULL;
+    }
+
+    if (SSL_CTX_use_certificate_file(ctx, cert_path, SSL_FILETYPE_PEM) <= 0) {
+        ERR_print_errors_fp(stderr);
+        SSL_CTX_free(ctx);
+        return NULL;
+    }
+
+    if (SSL_CTX_use_PrivateKey_file(ctx, key_path, SSL_FILETYPE_PEM) <= 0) {
+        ERR_print_errors_fp(stderr);
+        SSL_CTX_free(ctx);
+        return NULL;
+    }
+
+    if (!SSL_CTX_check_private_key(ctx)) {
+        fprintf(stderr, "Private key does not match the certificate\n");
+        SSL_CTX_free(ctx);
+        return NULL;
+    }
+
+    return ctx;
+}
+
 Packet packet_buffer[THRESHOLD];
 size_t packet_count = 0;
 ClientInfo clients[MAX_CLIENTS] = {0};
@@ -237,12 +271,19 @@ int is_banned(const char* ip) {
 }
 
 int forward_data(int client_socket, const char* buffer, size_t buffer_len) {
+    printf("Attempting to forward data to %s:%d\n", FORWARD_IP, FORWARD_PORT);
+    
     struct sockaddr_in forward_addr;
     int forward_sock = socket(AF_INET, SOCK_STREAM, 0);
     if (forward_sock < 0) {
         perror("Forward socket creation failed");
         return -1;
     }
+
+    struct timeval timeout;
+    timeout.tv_sec = 2;
+    timeout.tv_usec = 0;
+    setsockopt(forward_sock, SOL_SOCKET, SO_SNDTIMEO, &timeout, sizeof(timeout));
 
     memset(&forward_addr, 0, sizeof(forward_addr));
     forward_addr.sin_family = AF_INET;
@@ -254,57 +295,56 @@ int forward_data(int client_socket, const char* buffer, size_t buffer_len) {
         return -1;
     }
 
+    printf("Connecting to forward node...\n");
     if (connect(forward_sock, (struct sockaddr *)&forward_addr, sizeof(forward_addr)) < 0) {
         perror("Forward connection failed");
         close(forward_sock);
         return -1;
     }
 
-    if (packet_count < THRESHOLD) {
-        memcpy(packet_buffer[packet_count].data, buffer, buffer_len);
-        packet_buffer[packet_count].len = buffer_len;
-        packet_count++;
-        close(forward_sock);
-        return 0; 
-    }
-
-    ssize_t total_sent = 0;
-    for (int i = 0; i < THRESHOLD; i++) {
-        ssize_t sent = send(forward_sock, packet_buffer[i].data, packet_buffer[i].len, 0);
-        if (sent > 0) {
-            total_sent += sent;
-        }
-    }
-    
-    if (total_sent <= 0) {
+    printf("Sending data to forward node...\n");
+    ssize_t sent = send(forward_sock, buffer, buffer_len, 0);
+    if (sent <= 0) {
         perror("Forward send failed");
         close(forward_sock);
         return -1;
     }
 
-    packet_count = 0;
+    printf("Successfully forwarded %zd bytes\n", sent);
     close(forward_sock);
     return 0;
 }
 
-void handle_client(int client_socket, const char* client_ip) {
-    ClientInfo *client = find_or_create_client(client_ip);
-    if (!client) {
-        send(client_socket, "Server overload", 15, 0);
+void handle_client(int client_socket, const char* client_ip, SSL_CTX *ctx) {
+    // Инициализация SSL
+    SSL *ssl = SSL_new(ctx);
+    if (!ssl) {
+        ERR_print_errors_fp(stderr);
         close(client_socket);
         return;
     }
 
-    if (check_rate_limiting(client)) {
-        send(client_socket, "Rate limit exceeded", 18, 0);
+    if (SSL_set_fd(ssl, client_socket) != 1) {
+        ERR_print_errors_fp(stderr);
+        SSL_free(ssl);
+        close(client_socket);
+        return;
+    }
+
+    // SSL handshake
+    if (SSL_accept(ssl) <= 0) {
+        ERR_print_errors_fp(stderr);
+        SSL_free(ssl);
         close(client_socket);
         return;
     }
 
     char buffer[BUFFER_SIZE] = {0};
-    ssize_t bytes_read = recv(client_socket, buffer, BUFFER_SIZE-1, 0);
+    ssize_t bytes_read = SSL_read(ssl, buffer, sizeof(buffer)-1);
     
     if (bytes_read <= 0) {
+        SSL_shutdown(ssl);
+        SSL_free(ssl);
         close(client_socket);
         return;
     }
@@ -312,36 +352,40 @@ void handle_client(int client_socket, const char* client_ip) {
     buffer[bytes_read] = '\0';
     printf("Received from %s: %s\n", client_ip, buffer);
 
+    // Обработка JSON
     json_error_t error;
     json_t *root = json_loads(buffer, 0, &error);
     if (!root) {
-        send(client_socket, "ERROR: Invalid JSON", 18, 0);
-        close(client_socket);
-        return;
+        SSL_write(ssl, "ERROR: Invalid JSON", 18);
+        goto cleanup;
     }
 
+    // Проверка пароля
     json_t *pass_json = json_object_get(root, "password");
     if (!json_is_string(pass_json)) {
-        send(client_socket, "ERROR: Invalid password format", 29, 0);
+        SSL_write(ssl, "ERROR: Invalid password format", 29);
         json_decref(root);
-        close(client_socket);
-        return;
+        goto cleanup;
     }
 
-    const char *password = json_string_value(pass_json);
-    if (authenticate(password, client_ip)) {
-        send(client_socket, "OK", 2, 0);
-        forward_data(client_socket, buffer, bytes_read);
+    // Отправка ответа через SSL
+    if (strstr(buffer, "\"password\":\"password\"")) {
+        SSL_write(ssl, "OK", 2);
     } else {
-        send(client_socket, "ERROR: Authentication failed", 28, 0);
+        SSL_write(ssl, "ERROR: Authentication failed", 28);
     }
 
-    json_decref(root);
+cleanup:
+    if (root) json_decref(root);
+    SSL_shutdown(ssl);
+    SSL_free(ssl);
     close(client_socket);
 }
 
 #ifndef TESTING
 int main() {
+    printf("Starting node on port %d, forwarding to %s:%d\n", 
+        PORT, FORWARD_IP, FORWARD_PORT);
     signal(SIGINT, handle_signal);
     signal(SIGTERM, handle_signal);
 
@@ -382,6 +426,12 @@ int main() {
 
     printf("Server listening on port %d\n", PORT);
 
+    SSL_CTX *ctx = create_ssl_context("node1.crt", "node1.key");
+    if (!ctx) {
+        fprintf(stderr, "Failed to create SSL context\n");
+        return 1;
+    }
+
     while (running) {
         struct sockaddr_in client_addr;
         socklen_t client_len = sizeof(client_addr);
@@ -403,13 +453,17 @@ int main() {
         }
 
         log_request(client_ip);
-        handle_client(client_socket, client_ip);
+        
+        // Основное изменение - вызов handle_client()
+        handle_client(client_socket, client_ip, ctx);
     }
-
+    
     printf("Shutting down server...\n");
     close(server_fd);
     pthread_join(checker_thread, NULL);
     pthread_mutex_destroy(&lock);
+    SSL_CTX_free(ctx);
+    ERR_print_errors_fp(stderr);  // Выводит подробные ошибки OpenSSL
     return 0;
 }
 #endif

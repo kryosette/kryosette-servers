@@ -16,17 +16,15 @@
 #include <math.h>
 #include <time.h>
 #include <immintrin.h>
-#include <openssl/rand.h>
-#include <openssl/ssl.h>
-#include <openssl/err.h> 
+#include <openssl/rand.h> 
 
 // Константы
 #define MAX_CLIENTS 1000
 #define MAX_REQUESTS_PER_SECOND 100
 #define BAN_TIME 60
-#define PORT 8081
-#define FORWARD_PORT 8082 
-#define FORWARD_IP "127.0.0.1" 
+#define PORT 8083
+// #define FORWARD_PORT 8082 
+// #define FORWARD_IP "127.0.0.1" 
 #define BUFFER_SIZE 1024
 #define MAX_PASSWORD_LEN 256
 #define THRESHOLD 5
@@ -79,6 +77,6 @@ void* check_connections(void* arg);
 void log_request(const char* ip);
 int is_banned(const char* ip);
 int forward_data(int client_socket, const char* buffer, size_t buffer_len);
-void handle_client(int client_socket, const char* client_ip, SSL_CTX *ctx);
+void handle_client(int client_socket, const char* client_ip);
 
 #endif 

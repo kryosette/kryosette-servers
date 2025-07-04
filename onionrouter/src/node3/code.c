@@ -342,8 +342,6 @@ void handle_client(int client_socket, const char* client_ip) {
 
 #ifndef TESTING
 int main() {
-    printf("Starting node on port %d, forwarding to %s:%d\n", 
-        PORT, FORWARD_IP, FORWARD_PORT);
     signal(SIGINT, handle_signal);
     signal(SIGTERM, handle_signal);
 
@@ -370,26 +368,18 @@ int main() {
     address.sin_addr.s_addr = INADDR_ANY;
     address.sin_port = htons(PORT);
 
-    printf("\n--- Node 2 (Port: %d) ---\n", PORT);
-    printf("1. Socket created\n");
-    printf("2. SO_REUSEADDR set\n");
-    
     if (bind(server_fd, (struct sockaddr *)&address, sizeof(address)) < 0) {
-        perror("3. Bind failed");
-        printf("Is port %d already in use? Check with: netstat -tulnp | grep %d\n", PORT, PORT);
+        perror("Bind failed");
+        close(server_fd);
         exit(EXIT_FAILURE);
-    } else {
-        printf("3. Bind successful (port %d)\n", PORT);
     }
-    
+
     if (listen(server_fd, 10) < 0) {
-        perror("4. Listen failed");
+        perror("Listen failed");
+        close(server_fd); 
         exit(EXIT_FAILURE);
-    } else {
-        printf("4. Now listening on port %d\n", PORT);
     }
-    
-    printf("5. Ready to accept connections...\n\n");
+
     printf("Server listening on port %d\n", PORT);
 
     while (running) {
