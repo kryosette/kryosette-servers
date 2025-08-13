@@ -314,59 +314,146 @@ int is_banned(const char *ip)
     return banned;
 }
 
-int forward_data(int client_socket, const char *buffer, size_t buffer_len)
+/*
+  @forward_data
+*/
+
+Error socket_set_timeout(int sockfd, long sec, long usec)
+{
+    struct timeval timeout = {.tv_sec = sec, .tv_usec = usec};
+    if (setsockopt(forward_data, SOL_SOCKET, SO_SNDTIMEO, &timeout, sizeof(timeout)))
+    {
+        return (Error){.code = errno, .message = strerror(errno)};
+    }
+
+    return (Error){0};
+}
+
+Error socket_create_and_connect(const char *ip, int port, int *out_sockfd)
+{
+    int sockfd = socket(AF_INET, SOCK_STREAM, 0);
+    if (sockfd < 0)
+    {
+        return (Error){.code = errno, .message = "socket creation failed"};
+    }
+
+    Error err = socket_set_timeout(sockfd, 2, 0);
+    if (!is_ok(err))
+    {
+        close(sockfd);
+        return err;
+    }
+
+    struct sockaddr_in addr = {
+        .sin_family = AF_INET,
+        .sin_port = htons(port)};
+    if (inet_pton(AF_INET, ip, &addr.sin_addr) <= 0)
+    {
+        close(sockfd);
+        return (Error){.code = EINVAL, .message = "invalid IP address"};
+    }
+
+    if (connect(sockfd, (struct sockaddr *)&addr, sizeof(addr)))
+    {
+        close(sockfd);
+        return (Error){.code = errno, .message = "connection failed"};
+    }
+
+    *out_sockfd = sockfd;
+    return (Error){0};
+}
+
+Error socket_send_all(int sockfd, const char *buffer, size_t buffer_len)
+{
+    ssize_t sent = send(sockfd, buffer, buffer_len, 0);
+    if (sent < 0)
+    {
+        return (Error){.code = errno, .message = "send failed"};
+    }
+    if ((size_t)sent != buffer_len)
+    {
+        return (Error){.code = EPIPE, .message = "partial data sent"};
+    }
+    return (Error){0};
+}
+
+Error forward_data(int client_socket, const char *buffer, size_t buffer_len)
 {
     printf("Attempting to forward data to %s:%d\n", FORWARD_IP, FORWARD_PORT);
 
-    struct sockaddr_in forward_addr;
-    int forward_sock = socket(AF_INET, SOCK_STREAM, 0);
-    if (forward_sock < 0)
+    int forward_sock;
+    Error err = socket_create_and_connect(FORWARD_IP, FORWARD_PORT, &forward_sock);
+    if (!is_ok(err))
     {
-        perror("Forward socket creation failed");
-        return -1;
-    }
-
-    struct timeval timeout;
-    timeout.tv_sec = 2;
-    timeout.tv_usec = 0;
-    /*
-    int setsockopt(int socket, int level, int option_name,
-           const void *option_value, socklen_t option_len);
-    */
-    setsockopt(forward_sock, SOL_SOCKET, SO_SNDTIMEO, &timeout, sizeof(timeout));
-
-    memset(&forward_addr, 0, sizeof(forward_addr));
-    forward_addr.sin_family = AF_INET;
-    forward_addr.sin_port = htons(FORWARD_PORT);
-
-    if (inet_pton(AF_INET, FORWARD_IP, &forward_addr.sin_addr) <= 0)
-    {
-        perror("Invalid forward address");
-        close(forward_sock);
-        return -1;
-    }
-
-    printf("Connecting to forward node...\n");
-    if (connect(forward_sock, (struct sockaddr *)&forward_addr, sizeof(forward_addr)) < 0)
-    {
-        perror("Forward connection failed");
-        close(forward_sock);
-        return -1;
+        return err;
     }
 
     printf("Sending data to forward node...\n");
-    ssize_t sent = send(forward_sock, buffer, buffer_len, 0);
-    if (sent <= 0)
+    err = socket_send_all(forward_sock, buffer, buffer_len);
+    close(forward_sock);
+
+    if (!is_ok(err))
     {
-        perror("Forward send failed");
-        close(forward_sock);
-        return -1;
+        return err;
     }
 
-    printf("Successfully forwarded %zd bytes\n", sent);
-    close(forward_sock);
-    return 0;
+    printf("Successfully forwarded %zu bytes\n", buffer_len);
+    return (Error){0};
 }
+
+// int forward_data(int client_socket, const char *buffer, size_t buffer_len)
+// {
+//     printf("Attempting to forward data to %s:%d\n", FORWARD_IP, FORWARD_PORT);
+
+//     struct sockaddr_in forward_addr;
+//     int forward_sock = socket(AF_INET, SOCK_STREAM, 0);
+//     if (forward_sock < 0)
+//     {
+//         perror("Forward socket creation failed");
+//         return -1;
+//     }
+
+//     struct timeval timeout;
+//     timeout.tv_sec = 2;
+//     timeout.tv_usec = 0;
+//     /*
+//     int setsockopt(int socket, int level, int option_name,
+//            const void *option_value, socklen_t option_len);
+//     */
+//     setsockopt(forward_sock, SOL_SOCKET, SO_SNDTIMEO, &timeout, sizeof(timeout));
+
+//     memset(&forward_addr, 0, sizeof(forward_addr));
+//     forward_addr.sin_family = AF_INET;
+//     forward_addr.sin_port = htons(FORWARD_PORT);
+
+//     if (inet_pton(AF_INET, FORWARD_IP, &forward_addr.sin_addr) <= 0)
+//     {
+//         perror("Invalid forward address");
+//         close(forward_sock);
+//         return -1;
+//     }
+
+//     printf("Connecting to forward node...\n");
+//     if (connect(forward_sock, (struct sockaddr *)&forward_addr, sizeof(forward_addr)) < 0)
+//     {
+//         perror("Forward connection failed");
+//         close(forward_sock);
+//         return -1;
+//     }
+
+//     printf("Sending data to forward node...\n");
+//     ssize_t sent = send(forward_sock, buffer, buffer_len, 0);
+//     if (sent <= 0)
+//     {
+//         perror("Forward send failed");
+//         close(forward_sock);
+//         return -1;
+//     }
+
+//     printf("Successfully forwarded %zd bytes\n", sent);
+//     close(forward_sock);
+//     return 0;
+// }
 
 void handle_client(int client_socket, const char *client_ip, SSL_CTX *ctx)
 {
@@ -450,10 +537,10 @@ cleanup:
 int main()
 {
     struct io_uring ring;
-    io_uring_queue_init(ENTRIES, &ring, 0)
+    io_uring_queue_init(ENTRIES, &ring, 0);
 
-        printf("Starting node on port %d, forwarding to %s:%d\n",
-               PORT, FORWARD_IP, FORWARD_PORT);
+    printf("Starting node on port %d, forwarding to %s:%d\n",
+           PORT, FORWARD_IP, FORWARD_PORT);
     signal(SIGINT, handle_signal);
     signal(SIGTERM, handle_signal);
 

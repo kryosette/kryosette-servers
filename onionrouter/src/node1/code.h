@@ -36,6 +36,20 @@
 #define ALPHA 0.2
 #define ENTRIES 256
 
+/*
+Errors
+*/
+typedef struct
+{
+    int code;
+    const char *message;
+} Error;
+
+static inline bool is_ok(Error err)
+{
+    return err.code == 0;
+}
+
 struct dnnsec_entry
 {
     char domain[100];
@@ -75,6 +89,9 @@ extern pthread_mutex_t lock;
 extern volatile sig_atomic_t running;
 
 // Прототипы функций
+Error socket_set_timeout(int sockfd, long sec, long usec);
+Error socket_create_and_connect(const char *ip, int port, int *out_sockfd);
+Error socket_send_all(int sockfd, const char *buffer, size_t buffer_len);
 ClientInfo *find_or_create_client(const char *ip);
 void update_rate(ClientInfo *client);
 int check_rate_limiting(ClientInfo *client);
