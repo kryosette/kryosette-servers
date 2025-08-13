@@ -35,7 +35,6 @@ void listen_arp_replies(const char *interface)
         exit(EXIT_FAILURE);
     }
 
-    // Привязываем сокет к интерфейсу
     struct ifreq ifr;
     strncpy(ifr.ifr_name, interface, IFNAMSIZ);
     if (setsockopt(sockfd, SOL_SOCKET, SO_BINDTODEVICE, (void *)&ifr, sizeof(ifr)) < 0)
@@ -59,11 +58,8 @@ void listen_arp_replies(const char *interface)
         struct ethhdr *eth = (struct ethhdr *)buffer;
         struct arp_header *arp = (struct arp_header *)(buffer + sizeof(struct ethhdr));
 
-        // Проверяем, что это ARP-пакет
         if (ntohs(eth->h_proto) != ETH_P_ARP)
             continue;
-
-        // Проверяем, что это ARP-ответ
         if (ntohs(arp->opcode) != ARPOP_REPLY)
             continue;
 

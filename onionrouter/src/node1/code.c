@@ -329,6 +329,10 @@ int forward_data(int client_socket, const char *buffer, size_t buffer_len)
     struct timeval timeout;
     timeout.tv_sec = 2;
     timeout.tv_usec = 0;
+    /*
+    int setsockopt(int socket, int level, int option_name,
+           const void *option_value, socklen_t option_len);
+    */
     setsockopt(forward_sock, SOL_SOCKET, SO_SNDTIMEO, &timeout, sizeof(timeout));
 
     memset(&forward_addr, 0, sizeof(forward_addr));
