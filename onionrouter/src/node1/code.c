@@ -321,7 +321,7 @@ int is_banned(const char *ip)
 Error socket_set_timeout(int sockfd, long sec, long usec)
 {
     struct timeval timeout = {.tv_sec = sec, .tv_usec = usec};
-    if (setsockopt(forward_data, SOL_SOCKET, SO_SNDTIMEO, &timeout, sizeof(timeout)))
+    if (setsockopt(sockfd, SOL_SOCKET, SO_SNDTIMEO, &timeout, sizeof(timeout)))
     {
         return (Error){.code = errno, .message = strerror(errno)};
     }

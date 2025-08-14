@@ -100,7 +100,7 @@ int authenticate(const char *password, const char *ip);
 void *check_connections(void *arg);
 void log_request(const char *ip);
 int is_banned(const char *ip);
-int forward_data(int client_socket, const char *buffer, size_t buffer_len);
+Error forward_data(int client_socket, const char *buffer, size_t buffer_len);
 void handle_client(int client_socket, const char *client_ip, SSL_CTX *ctx);
 
 #endif
