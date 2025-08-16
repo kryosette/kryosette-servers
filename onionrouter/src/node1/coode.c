@@ -76,7 +76,7 @@ void load_data_from_file(LSMTree *tree)
 void save_all_data_to_file(LSMTree *tree)
 {
     printf("DEBUG: Saving SSTable to '%s'\n", DATA_FILE);
-    FILE *file = fopen(DATA_FILE, "ab");
+    FILE *file = fopen(DATA_FILE, "wb");
     if (!file)
     {
         perror("Failed to open data file for writing");
@@ -93,8 +93,9 @@ void save_all_data_to_file(LSMTree *tree)
         // Сохраняем размер SSTable
         fwrite(&sstable->size, sizeof(int), 1, file);
 
-        // Сохраняем пары ключ-значение
+        // Сохраняем пары ключ - значение
         fwrite(sstable->pairs, sizeof(KeyValuePair), sstable->size, file);
+        // fwrite(&tree->memtable.pairs[i], sizeof(KeyValuePair), 1, file);
     }
 
     fclose(file);
@@ -411,6 +412,10 @@ void free_lsm_tree(LSMTree *tree)
     }
 
     printf("LSM-tree resources freed\n");
+}
+
+void public()
+{
 }
 
 // int main()

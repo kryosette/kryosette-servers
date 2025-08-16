@@ -39,7 +39,7 @@
 
 /*lsm tree*/
 #define MEMTABLE_SIZE 50
-#define MAX_SSTABLES 10
+#define MAX_SSTABLES 100
 #define KEY_SIZE 50
 #define VALUE_SIZE 100
 #define DATA_FILE "lsm_data.bin"
