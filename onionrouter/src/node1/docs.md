@@ -27,7 +27,7 @@ Imagine that you have a common variable that is used by multiple threads. If two
 
 **Usage example (pseudocode):**
 
-``
+```
 // Mutex declaration
 Mutex myMutex;
 
@@ -52,7 +52,7 @@ function thread2() {
 
   myMutex.unlock(); // Releasing the mutex
 }
-``
+```
 
 In this example, both threads are trying to access the shared variable `sharedResource'. The mutex ensures that only one thread can be in the critical section at any given time (between `lock()` and `unlock()`) and change this variable.
 

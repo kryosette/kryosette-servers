@@ -1,5 +1,6 @@
 #include "code.h"
 
+/*
 SSL_CTX *create_ssl_context(const char *cert_path, const char *key_path)
 {
     SSL_CTX *ctx;
@@ -38,6 +39,7 @@ SSL_CTX *create_ssl_context(const char *cert_path, const char *key_path)
 
     return ctx;
 }
+*/
 
 Packet packet_buffer[THRESHOLD];
 size_t packet_count = 0;
@@ -89,7 +91,7 @@ The probability for an observation (or occurrence) of the symbol xi in A.
 ❗Min-entropy measures predictability—it tells you how easily an attacker can guess the
                         most likely outcome of a random process.
 
-Entropy is defined relative to one’s knowledge of an experiment’s output prior to observation,
+Entropy is defined relative to one's knowledge of an experiment's output prior to observation,
 and reflects the uncertainty associated with predicting its value – the larger the amount of entropy,
 the greater the uncertainty in predicting the value of an observation.
 
@@ -109,31 +111,23 @@ A={x1,x2,…,xk} with probability Pr(X=xi) = pi for i =1,…,k is defined as
 
 void max_secure_rand(unsigned char *buf, size_t len)
 {
-// Try hardware RNG first (Intel/AMD)
-#ifdef __x86_64__
-    for (size_t i = 0; i < len; i += sizeof(unsigned long long))
-    {
-        unsigned long long rand_val;
-        if (_rdseed64_step(&rand_val) == 1)
-        { // Prefer RDSEED (true entropy)
-            memcpy(buf + i, &rand_val,
-                   (len - i) > sizeof(rand_val) ? sizeof(rand_val) : (len - i));
-        }
-        else if (_rdrand64_step(&rand_val) == 1)
-        { // Fallback to RDRAND
-            memcpy(buf + i, &rand_val,
-                   (len - i) > sizeof(rand_val) ? sizeof(rand_val) : (len - i));
-        }
-        else
-            break;
-    }
-#endif
-
-    // Fallback to OS RNG if hardware RNG fails or not available
+    // Вариант 1: Используем только OpenSSL
     if (RAND_bytes(buf, len) != 1)
     {
-        abort(); // Catastrophic failure
+        fprintf(stderr, "Ошибка генерации случайных чисел\n");
+        abort();
     }
+
+    /*
+    // Вариант 2: Альтернативная реализация через /dev/urandom
+    FILE *f = fopen("/dev/urandom", "rb");
+    if (!f || fread(buf, 1, len, f) != len) {
+        if (f) fclose(f);
+        fprintf(stderr, "Ошибка чтения /dev/urandom\n");
+        abort();
+    }
+    fclose(f);
+    */
 }
 
 void secure_pad(unsigned char *data, size_t *current_len, size_t max_len, int mode)
@@ -314,10 +308,6 @@ int is_banned(const char *ip)
     return banned;
 }
 
-/*
-  @forward_data
-*/
-
 Error socket_set_timeout(int sockfd, long sec, long usec)
 {
     struct timeval timeout = {.tv_sec = sec, .tv_usec = usec};
@@ -401,63 +391,10 @@ Error forward_data(int client_socket, const char *buffer, size_t buffer_len)
     return (Error){0};
 }
 
-// int forward_data(int client_socket, const char *buffer, size_t buffer_len)
-// {
-//     printf("Attempting to forward data to %s:%d\n", FORWARD_IP, FORWARD_PORT);
-
-//     struct sockaddr_in forward_addr;
-//     int forward_sock = socket(AF_INET, SOCK_STREAM, 0);
-//     if (forward_sock < 0)
-//     {
-//         perror("Forward socket creation failed");
-//         return -1;
-//     }
-
-//     struct timeval timeout;
-//     timeout.tv_sec = 2;
-//     timeout.tv_usec = 0;
-//     /*
-//     int setsockopt(int socket, int level, int option_name,
-//            const void *option_value, socklen_t option_len);
-//     */
-//     setsockopt(forward_sock, SOL_SOCKET, SO_SNDTIMEO, &timeout, sizeof(timeout));
-
-//     memset(&forward_addr, 0, sizeof(forward_addr));
-//     forward_addr.sin_family = AF_INET;
-//     forward_addr.sin_port = htons(FORWARD_PORT);
-
-//     if (inet_pton(AF_INET, FORWARD_IP, &forward_addr.sin_addr) <= 0)
-//     {
-//         perror("Invalid forward address");
-//         close(forward_sock);
-//         return -1;
-//     }
-
-//     printf("Connecting to forward node...\n");
-//     if (connect(forward_sock, (struct sockaddr *)&forward_addr, sizeof(forward_addr)) < 0)
-//     {
-//         perror("Forward connection failed");
-//         close(forward_sock);
-//         return -1;
-//     }
-
-//     printf("Sending data to forward node...\n");
-//     ssize_t sent = send(forward_sock, buffer, buffer_len, 0);
-//     if (sent <= 0)
-//     {
-//         perror("Forward send failed");
-//         close(forward_sock);
-//         return -1;
-//     }
-
-//     printf("Successfully forwarded %zd bytes\n", sent);
-//     close(forward_sock);
-//     return 0;
-// }
-
-void handle_client(int client_socket, const char *client_ip, SSL_CTX *ctx)
+void handle_client(int client_socket, const char *client_ip, /*SSL_CTX *ctx,*/ LSMTree *db)
 {
-    // Инициализация SSL
+    /*
+    // Закомментированная SSL часть
     SSL *ssl = SSL_new(ctx);
     if (!ssl)
     {
@@ -474,7 +411,6 @@ void handle_client(int client_socket, const char *client_ip, SSL_CTX *ctx)
         return;
     }
 
-    // SSL handshake
     if (SSL_accept(ssl) <= 0)
     {
         ERR_print_errors_fp(stderr);
@@ -482,14 +418,18 @@ void handle_client(int client_socket, const char *client_ip, SSL_CTX *ctx)
         close(client_socket);
         return;
     }
+    */
 
     char buffer[BUFFER_SIZE] = {0};
-    ssize_t bytes_read = SSL_read(ssl, buffer, sizeof(buffer) - 1);
+    // Заменяем SSL_read на обычный read
+    ssize_t bytes_read = read(client_socket, buffer, sizeof(buffer) - 1);
 
     if (bytes_read <= 0)
     {
+        /*
         SSL_shutdown(ssl);
         SSL_free(ssl);
+        */
         close(client_socket);
         return;
     }
@@ -497,12 +437,18 @@ void handle_client(int client_socket, const char *client_ip, SSL_CTX *ctx)
     buffer[bytes_read] = '\0';
     printf("Received from %s: %s\n", client_ip, buffer);
 
+    char db_key[128];
+    snprintf(db_key, sizeof(db_key), "%s:%ld", client_ip, time(NULL));
+    lsm_put(db, db_key, buffer);
+    printf("Saved data for %s\n", client_ip);
+
     // Обработка JSON
     json_error_t error;
     json_t *root = json_loads(buffer, 0, &error);
     if (!root)
     {
-        SSL_write(ssl, "ERROR: Invalid JSON", 18);
+        // Заменяем SSL_write на обычный send
+        send(client_socket, "ERROR: Invalid JSON", 18, 0);
         goto cleanup;
     }
 
@@ -510,32 +456,37 @@ void handle_client(int client_socket, const char *client_ip, SSL_CTX *ctx)
     json_t *pass_json = json_object_get(root, "password");
     if (!json_is_string(pass_json))
     {
-        SSL_write(ssl, "ERROR: Invalid password format", 29);
+        send(client_socket, "ERROR: Invalid password format", 29, 0);
         json_decref(root);
         goto cleanup;
     }
 
-    // Отправка ответа через SSL
+    // Отправка ответа через обычный send вместо SSL_write
     if (strstr(buffer, "\"password\":\"password\""))
     {
-        SSL_write(ssl, "OK", 2);
+        send(client_socket, "OK", 2, 0);
     }
     else
     {
-        SSL_write(ssl, "ERROR: Authentication failed", 28);
+        send(client_socket, "ERROR: Authentication failed", 28, 0);
     }
 
 cleanup:
     if (root)
         json_decref(root);
+    /*
     SSL_shutdown(ssl);
     SSL_free(ssl);
+    */
     close(client_socket);
 }
 
 #ifndef TESTING
 int main()
 {
+    LSMTree hash_db;
+    init_lsm_tree(&hash_db);
+    lsm_put(&hash_db, "test", "value");
     struct io_uring ring;
     io_uring_queue_init(ENTRIES, &ring, 0);
 
@@ -585,23 +536,43 @@ int main()
 
     printf("Server listening on port %d\n", PORT);
 
+    /*
     SSL_CTX *ctx = create_ssl_context("node1.crt", "node1.key");
     if (!ctx)
     {
         fprintf(stderr, "Failed to create SSL context\n");
         return 1;
     }
+    */
 
     while (running)
     {
         struct sockaddr_in client_addr;
         socklen_t client_len = sizeof(client_addr);
-        int client_socket = accept(server_fd, (struct sockaddr *)&client_addr, &client_len);
 
+        fd_set readfds;
+        FD_ZERO(&readfds);
+        FD_SET(server_fd, &readfds);
+
+        struct timeval timeout = {.tv_sec = 1, .tv_usec = 0};
+        int ready = select(server_fd + 1, &readfds, NULL, NULL, &timeout);
+
+        if (ready < 0)
+        {
+            if (errno == EINTR && !running)
+                break;
+            perror("select failed");
+            continue;
+        }
+
+        if (ready == 0)
+            continue;
+
+        int client_socket = accept(server_fd, (struct sockaddr *)&client_addr, &client_len);
         if (client_socket < 0)
         {
             if (running)
-                perror("Accept failed");
+                perror("accept failed");
             continue;
         }
 
@@ -617,17 +588,20 @@ int main()
         }
 
         log_request(client_ip);
-
-        // Основное изменение - вызов handle_client()
-        handle_client(client_socket, client_ip, ctx);
+        handle_client(client_socket, client_ip, &hash_db);
     }
+
+    save_all_data_to_file(&hash_db);
 
     printf("Shutting down server...\n");
     close(server_fd);
     pthread_join(checker_thread, NULL);
     pthread_mutex_destroy(&lock);
+    /*
     SSL_CTX_free(ctx);
-    ERR_print_errors_fp(stderr); // Выводит подробные ошибки OpenSSL
+    */
+    free_lsm_tree(&hash_db);
+    // ERR_print_errors_fp(stderr); // Также закомментировано
     return 0;
 }
 #endif
