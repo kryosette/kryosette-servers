@@ -54,7 +54,7 @@ function thread2() {
 }
 ```
 
-In this example, both threads are trying to access the shared variable `sharedResource'. The mutex ensures that only one thread can be in the critical section at any given time (between `lock()` and `unlock()`) and change this variable.
+In this example, both threads are trying to access the shared variable `sharedResource`. The mutex ensures that only one thread can be in the critical section at any given time (between `lock()` and `unlock()`) and change this variable.
 
 **Mutexes vs Semaphores:**
 
@@ -68,8 +68,8 @@ In this example, both threads are trying to access the shared variable `sharedRe
 
 **Problems related to mutexes:**
 
-* **Deadlock (mutual blocking):** When two or more threads are blocked waiting for each other, forming a loop.  For example, thread 1 has captured mutex A and is waiting for mutex B, and thread 2 has captured mutex B and is waiting for mutex A.
-* **Priority Inversion:** A high-priority thread is waiting for a mutex captured by a low-priority thread.  This can cause the high-priority thread to be idle until the low-priority thread releases the mutex.
+* **Deadlock (mutual blocking):** When two or more threads are blocked waiting for each other, forming a loop. For example, thread 1 has captured mutex A and is waiting for mutex B, and thread 2 has captured mutex B and is waiting for mutex A.
+* **Priority Inversion:** A high-priority thread is waiting for a mutex captured by a low-priority thread. This can cause the high-priority thread to be idle until the low-priority thread releases the mutex.
 * **Starvation (starvation):** A thread is constantly unable to access the mutex because other threads are constantly grabbing it.
 
 **Implementation of mutexes:**
