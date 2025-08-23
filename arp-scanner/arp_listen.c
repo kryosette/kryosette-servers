@@ -58,6 +58,10 @@ void listen_arp_replies(const char *interface)
         struct ethhdr *eth = (struct ethhdr *)buffer;
         struct arp_header *arp = (struct arp_header *)(buffer + sizeof(struct ethhdr));
 
+        /*
+        The ntohs() function converts the unsigned short integer netshort from
+        network byte order to host byte order.
+        */
         if (ntohs(eth->h_proto) != ETH_P_ARP)
             continue;
         if (ntohs(arp->opcode) != ARPOP_REPLY)
@@ -67,6 +71,17 @@ void listen_arp_replies(const char *interface)
         time(&now);
         struct tm *tm_info = localtime(&now);
         char time_str[20];
+
+        /*
+        size_t strftime(char s[restrict .max], size_t max,
+                       const char *restrict format,
+                       const struct tm *restrict tm);
+
+        size_t strftime_l(char s[restrict .max], size_t max,
+                       const char *restrict format,
+                       const struct tm *restrict tm,
+                       locale_t locale);
+         */
         strftime(time_str, sizeof(time_str), "%H:%M:%S", tm_info);
 
         printf("[%s] Получен ARP-ответ от:\n", time_str);
