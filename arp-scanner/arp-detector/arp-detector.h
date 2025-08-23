@@ -14,6 +14,14 @@
 
 #define MAX_ENTRIES 1000
 
+/*
+    struct ether_arp {
+        struct arphdr ea_hdr;      // ARP header (hardware and protocol type, opcode, etc.)
+        u_char arp_sha[ETH_ALEN];  // Sender hardware address (MAC) - 6 bytes
+        u_char arp_spa[4];         // Sender protocol address (IPv4) - 4 bytes
+        u_char arp_tha[ETH_ALEN];  // Target hardware address (MAC) - 6 bytes
+        u_char arp_tpa[4];         // Target protocol address (IPv4) - 4 bytes
+*/
 struct arp_entry {
     uint32_t ip;  
     struct ether_addr mac; 
