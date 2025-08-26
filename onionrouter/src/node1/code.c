@@ -442,17 +442,14 @@ void handle_client(int client_socket, const char *client_ip, /*SSL_CTX *ctx,*/ L
     lsm_put(db, db_key, buffer);
     printf("Saved data for %s\n", client_ip);
 
-    // Обработка JSON
     json_error_t error;
     json_t *root = json_loads(buffer, 0, &error);
     if (!root)
     {
-        // Заменяем SSL_write на обычный send
         send(client_socket, "ERROR: Invalid JSON", 18, 0);
         goto cleanup;
     }
 
-    // Проверка пароля
     json_t *pass_json = json_object_get(root, "password");
     if (!json_is_string(pass_json))
     {
@@ -461,7 +458,6 @@ void handle_client(int client_socket, const char *client_ip, /*SSL_CTX *ctx,*/ L
         goto cleanup;
     }
 
-    // Отправка ответа через обычный send вместо SSL_write
     if (strstr(buffer, "\"password\":\"password\""))
     {
         send(client_socket, "OK", 2, 0);
@@ -601,7 +597,7 @@ int main()
     SSL_CTX_free(ctx);
     */
     free_lsm_tree(&hash_db);
-    // ERR_print_errors_fp(stderr); // Также закомментировано
+    // ERR_print_errors_fp(stderr);
     return 0;
 }
 #endif
