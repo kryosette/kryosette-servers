@@ -5,7 +5,7 @@
  *              the Network Layer and the Logical Link Control (LLC) Sublayer,
  *              and between the LLC and MAC sublayers.
  * @author Network Wizard 🧙‍♂️
- * @date 1985 (Standard), 2024 (Implementation)
+ * @date 1985 (Standard), 2025 (Implementation)
  * @license IEEE
  * @note This is an abstract interface definition. Implementation details are OS-specific.
  */
@@ -70,7 +70,7 @@ typedef struct {
  */
 typedef struct {
     lsap_address_t local_address; /**< Local LSAP */
-lsap_address_t remote_address; /**< Remote LSAP */
+    lsap_address_t remote_address; /**< Remote LSAP */
     llc_reason_t reason; /**< Reason for disconnection */
 } l_disconnect_indication_t;
 
@@ -81,8 +81,8 @@ lsap_address_t remote_address; /**< Remote LSAP */
  */
 typedef struct {
     lsap_address_t local_address; /**< Local LSAP */
-lsap_address_t remote_address; /**< Remote LSAP */
-llc_status_t status; /**< Disconnection operation status */
+    lsap_address_t remote_address; /**< Remote LSAP */
+    llc_status_t status; /**< Disconnection operation status */
 } l_disconnect_confirm_t;
 
 /**
@@ -92,7 +92,7 @@ llc_status_t status; /**< Disconnection operation status */
  */
 typedef struct {
     lsap_address_t local_address; /**< Local LSAP */
-lsap_address_t remote_address; /**< Remote LSAP */
+    lsap_address_t remote_address; /**< Remote LSAP */
 } l_reset_request_t;
 
 /**
@@ -102,8 +102,8 @@ lsap_address_t remote_address; /**< Remote LSAP */
  */
 typedef struct {
     lsap_address_t local_address; /**< Local LSAP */
-lsap_address_t remote_address; /**< Remote LSAP */
-llc_reason_t reason; /**< Reason for reset */
+    lsap_address_t remote_address; /**< Remote LSAP */
+    llc_reason_t reason; /**< Reason for reset */
 } l_reset_indication_t;
 
 /**
@@ -113,8 +113,8 @@ llc_reason_t reason; /**< Reason for reset */
  */
 typedef struct {
     lsap_address_t local_address; /**< Local LSAP */
-lsap_address_t remote_address; /**< Remote LSAP */
-llc_status_t status; /**< Reset operation status */
+    lsap_address_t remote_address; /**< Remote LSAP */
+    llc_status_t status; /**< Reset operation status */
 } l_reset_confirm_t;
 
 /**
@@ -124,8 +124,8 @@ llc_status_t status; /**< Reset operation status */
  */
 typedef struct {
     lsap_address_t local_address; /**< Local LSAP */
-lsap_address_t remote_address; /**< Remote LSAP */
-uint32_t amount; /**< Amount of data that can be transferred (in bytes or "credits") */
+     remote_address; /**< Remote LSAP */
+    uint32_t amount; /**< Amount of data that can be transferred (in bytes or "credits") */
 } l_connection_flowcontrol_request_t;
 
 /**
@@ -135,8 +135,8 @@ uint32_t amount; /**< Amount of data that can be transferred (in bytes or "credi
  */
 typedef struct {
     lsap_address_t local_address; /**< Local LSAP */
-lsap_address_t remote_address; /**< Remote LSAP */
-uint32_t amount; /**< Amount of data that can be transferred losslessly */
+    lsap_address_t remote_address; /**< Remote LSAP */
+    uint32_t amount; /**< Amount of data that can be transferred losslessly */
 } l_connection_flowcontrol_indication_t;
 
 /*===========================================================================*\
@@ -170,7 +170,7 @@ typedef uint8_t mac_reception_status_t;
  */
 typedef struct {
     mac_address_t destination_address; /**< Individual or group destination MAC address */
-msdu_t m_sdu; /**< Transmitted MAC Service Data Block (MSDU) */
+    msdu_t m_sdu; /**< Transmitted MAC Service Data Block (MSDU) */
     service_class_t requested_service_class;/**< Requested service class (priority) */
 } ma_unitdata_request_t;
 
@@ -181,9 +181,9 @@ msdu_t m_sdu; /**< Transmitted MAC Service Data Block (MSDU) */
  */
 typedef struct {
     mac_address_t destination_address; /**< Destination address from the received frame */
-mac_address_t source_address; /**< Source address from the received frame */
-msdu_t m_sdu; /**< Received MAC Service Data block (MSDU) */
-mac_reception_status_t reception_status;/**< Frame reception status (success/error) */
+    mac_address_t source_address; /**< Source address from the received frame */
+    msdu_t m_sdu; /**< Received MAC Service Data block (MSDU) */
+    mac_reception_status_t reception_status;/**< Frame reception status (success/error) */
     service_class_t service_class; /**< Service class of the received frame */
 } ma_unitdata_indication_t;
 
@@ -206,7 +206,7 @@ typedef struct {
 /** LLC SAP Structure (LLC Service Access Point Structure) */
 typedef struct {
     lsap_address_t address; /**< SAP address */
-uint8_t in_use; /**< Busy flag (1 = busy, 0 = free) */
+    uint8_t in_use; /**< Busy flag (1 = busy, 0 = free) */
 // ... other status management fields
 } llc_sap_entry_t;
 
