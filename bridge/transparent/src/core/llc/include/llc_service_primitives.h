@@ -17,7 +17,7 @@
 #include <stddef.h> 
 
 /*===========================================================================*\
- * Common Type Definitions)
+ * Common Type Definitions
 \*===========================================================================*/
 
 /** LSAP Address (Address of the access point to the data link services) */
