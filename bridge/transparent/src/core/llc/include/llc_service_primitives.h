@@ -4,7 +4,6 @@
  * @description This header defines the abstract service interface between 
  *              the Network Layer and the Logical Link Control (LLC) Sublayer,
  *              and between the LLC and MAC sublayers.
- * @author Network Wizard 🧙‍♂️
  * @date 1985 (Standard), 2025 (Implementation)
  * @license IEEE
  * @note This is an abstract interface definition. Implementation details are OS-specific.
