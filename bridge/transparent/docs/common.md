@@ -125,7 +125,7 @@ llc_register_stp_handler handler(stp_receive_bpdu);
 // Sending the BPDU frame to the STP module
 stp_receive_bpdu(port_num, frame);
 ```
-
+ 
 ---
 
 ## 🚨 **Special cases and exceptions**
@@ -145,4 +145,4 @@ stp_receive_bpdu(port_num, frame);
 4. **Filtering:** Avoiding unnecessary forwarding (saving traffic)
 5. **Integration:** Close interaction with STP to avoid loops
 
-This algorithm is the **heart** of any transparent bridge or switchboard. All other functions (VLAN, QoS, ACL) are added on top of this basic mechanism.
+ 
