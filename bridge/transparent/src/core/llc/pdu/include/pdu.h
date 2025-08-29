@@ -22,7 +22,6 @@
  * @defgroup supervisory_masks Supervisory Format Bit Masks
  * @brief Bit masks for S-format PDU control field extraction
  * @conforms IEEE 802.2 Section 5.4.2.2
- * @{
  */
 #define S_FORMAT_MASK 0x0003   /**< Mask for format identifier bits (bits 0-1) */
 #define S_FORMAT_VALUE 0x0001  /**< Value '01' for supervisory format */
@@ -30,7 +29,6 @@
 #define S_RESERVED_MASK 0x00F0 /**< Mask for reserved bits (bits 4-7) - must be 0 */
 #define S_PF_MASK 0x0100       /**< Mask for Poll/Final bit (bit 8) */
 #define S_NR_MASK 0xFE00       /**< Mask for Receive Sequence Number N(R) (bits 9-15) */
-/** @} */
 
 /**
  * @defgroup supervisory_codes Supervisory Function Codes
@@ -54,8 +52,8 @@ typedef enum
  * @conforms IEEE 802.2 Section 3.3.1.1
  */
 
-/*
- * this is a C++ preprocessor directive that tells the compiler to pack structures starting from this point, without byte alignment, and preserves the current alignment.
+/**
+ * this is a C preprocessor directive that tells the compiler to pack structures starting from this point, without byte alignment, and preserves the current alignment.
  */
 #pragma pack(push, 1)
 
