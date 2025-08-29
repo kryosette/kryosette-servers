@@ -54,6 +54,9 @@ typedef enum
  * @conforms IEEE 802.2 Section 3.3.1.1
  */
 
+/*
+ * this is a C++ preprocessor directive that tells the compiler to pack structures starting from this point, without byte alignment, and preserves the current alignment.
+ */
 #pragma pack(push, 1)
 
 /**
