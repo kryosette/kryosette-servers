@@ -43,6 +43,36 @@ typedef enum
 } supervisory_code_t;
 
 /* ========================================================================= */
+/*                    UNNUMBERED FORMAT CONSTANTS                            */
+/* ========================================================================= */
+
+/**
+ * @defgroup unnumbered_masks Unnumbered Format Bit Masks and Values
+ * @brief Bit masks and values for U-format PDU control field
+ * @conforms IEEE 802.2 Section 5.4.2.3, Fig 5-7a and 5-7b
+ * @{
+ */
+
+// Mask to ignore the P/F bit and highlight only the command/response template
+/// We look at Fig. 5-7a: we need bits 1,2,3,5,6,7 (bits 4 - P/F, bits 0 and 1 are always '11')
+// For simplicity, the entire byte is often masked to isolate a unique pattern.
+#define U_FORMAT_MASK 0xEC /* Mask: 1110 1100 */
+#define U_PF_MASK 0x10     /* Mask for the Poll/Final bit (bit 4) */
+
+// COMMAND TEMPLATES - values after applying the U_FORMAT_MASK mask
+#define U_UI_CMD_PATTERN 0x00    /* Pattern for UI Command: 0000 0000 -> 1100 P000 */
+#define U_DISC_CMD_PATTERN 0x40  /* Pattern for DISC Command: 0100 0000 -> 1100 P010 */
+#define U_SABME_CMD_PATTERN 0x6C /* Pattern for SABME Command:0110 1100 -> 1111 P110 */
+#define U_XID_CMD_PATTERN 0xAC   /* Pattern for XID Command: 1010 1100 -> 1111 P101 */
+#define U_TEST_CMD_PATTERN 0xE0  /* Pattern for TEST Command: 1110 0000 -> 1100 P111 */
+
+// RESPONSE TEMPLATES - values after applying the U_FORMAT_MASK mask
+#define U_UA_RESP_PATTERN 0x60   /* Pattern for UA Response: 0110 0000 -> 1100 F110 */
+#define U_DM_RESP_PATTERN 0x0C   /* Pattern for DM Response: 0000 1100 -> 1111 F000 */
+#define U_FRMR_RESP_PATTERN 0x84 /* Pattern for FRMR Response:1000 0100 -> 1110 F001 */
+/** @} */
+
+/* ========================================================================= */
 /*                     IEEE 802.2 PDU STRUCTURES                            */
 /* ========================================================================= */
 
@@ -131,6 +161,40 @@ typedef struct
 /* ========================================================================= */
 /*                  IEEE 802.2 PDU MANIPULATION FUNCTIONS                    */
 /* ========================================================================= */
+
+/**
+ * @brief Check if the control field matches a specific U-format type.
+ * @param control_byte The 8-bit control field value.
+ * @param pattern The pattern to compare against (e.g., U_SABME_CMD_PATTERN).
+ * @return true if the pattern matches (ignoring the P/F bit), false otherwise.
+ */
+static inline bool is_unnumbered_type(uint8_t control_byte, uint8_t pattern)
+{
+    // Apply a mask to filter out everything except the template bits and compare
+    return (control_byte & U_FORMAT_MASK) == pattern;
+}
+
+/**
+ * @brief Create a U-format control field byte.
+ * @param pattern The base pattern for the command/response (e.g., U_SABME_CMD_PATTERN).
+ * @param poll_final The value for the Poll/Final bit.
+ * @return The complete 8-bit control field value.
+ */
+static inline uint8_t create_unnumbered(uint8_t pattern, bool poll_final)
+{
+    // Combining the command template and the value of the P/F bit
+    return pattern | (poll_final ? U_PF_MASK : 0);
+}
+
+/**
+ * @brief Extract the Poll/Final bit from a U-format control field.
+ * @param control_byte The 8-bit control field value.
+ * @return true if Poll/Final bit is set (1), false otherwise (0).
+ */
+static inline bool get_unnumbered_poll_final(uint8_t control_byte)
+{
+    return (control_byte & U_PF_MASK) != 0;
+}
 
 /**
  * @defgroup supervisory_functions Supervisory Format Functions
