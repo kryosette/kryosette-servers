@@ -11,8 +11,10 @@ typedef struct {
 } llc_abm_data_t;
 
 typedef struct {
-  uint8_t dm_response_count;
-  int is_listening_for_setup;
+    uint32_t sabme_received_count;       
+    uint32_t dm_sent_count;           
+    uint32_t ua_sent_count;
+    uint8_t default_response_policy;  
 } llc_adm_data_t;
 
 typedef struct {
