@@ -1,6 +1,7 @@
 #include "llc_fsm.h"
 #include "llc_states.h"
 
+// improve
 static void _send_dm_response(const uint8_t *dest_mac, uint8_t dsap, uint8_t ssap) {
     llc_send_unnumbered_frame(dest_mac, dsap, ssap, LLC_DM, NULL, 0);
 }
