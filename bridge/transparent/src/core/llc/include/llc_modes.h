@@ -27,6 +27,7 @@ typedef struct {
   }
 } llc_station_global_state_t;
 
-void llc_switch_to_abm_mode(llc_connection *conn);
+void llc_switch_to_abm_mode(llc_station_global_state_t *state,llc_connection *conn);
+void llc_switch_to_adm_mode(llc_station_global_state_t *state);
 
 #endif
