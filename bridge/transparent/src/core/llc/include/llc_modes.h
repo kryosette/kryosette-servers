@@ -7,7 +7,16 @@
 typedef struct llc_connection llc_connection_t; 
 
 typedef struct {
-  llc_connection_t *active_connection;
+    llc_connection_t *active_connection;
+
+    uint32_t total_i_frames_sent;     // Сколько всего I-фреймов отправили
+    uint32_t total_i_frames_received; // Сколько всего I-фреймов приняли
+    uint32_t total_rr_sent;           // Сколько всего RR отправили
+    uint32_t rej_sent_count;          // Сколько раз говорили "Повтори" (REJ)
+    uint32_t timeout_events;          // Сколько раз срабатывал таймер
+
+    uint16_t max_information_field_size; // Макс. размер данных, который готов принимать
+    uint32_t t1_timeout_value_ms;        // Базовая величина таймаута для retransmission
 } llc_abm_data_t;
 
 typedef struct {
