@@ -4,7 +4,7 @@
 #include <arpa/inet.h> 
 
 /*
- for ethernet
+ for ethernet, msdu for wi-fi
 */
 static uint8_t mac_my_address[MAC_ADDR_LEN];
 static mac_rx_callback_t rx_callback = NULL;
@@ -74,5 +74,9 @@ void mac_receive_frame(const uint8_t* frame_data, size_t frame_len) {
 }
 
 void mac_update_fcs(eth_frame_t* frame) {
-    frame->fcs = 0x12345678; // plug
+    
+}
+
+const mac_stats_t *mac_get_stats() {
+ return &statistics;
 }
