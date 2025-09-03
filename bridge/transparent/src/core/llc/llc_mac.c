@@ -18,7 +18,11 @@ void mac_init(const uint8_t* my_mac_addr) {
   memset(&statistics, 0, sizeof(statistics));
 }
 
-bool mac_send_llc_pdu(const uint8_t* dst_addr, const uint8_t* llc_pdu, size_t pdu_len) {}
+bool mac_send_llc_pdu(const uint8_t* dst_addr, const uint8_t* llc_pdu, size_t pdu_len) {
+    if (!dst_addr || !llc_pdu || pdu_len == 0) return false;
+    
+    return mac_send_frame(dst_addr, llc_pdu, pdu_len, ETH_P_LLC_SNAP);
+}
 
 void mac_set_rx_callback(mac_rx_callback_t callback) {
   
