@@ -3,6 +3,9 @@
 #include <string.h>
 #include <arpa/inet.h> 
 
+/*
+ for ethernet
+*/
 static uint8_t mac_my_address[MAC_ADDR_LEN];
 static mac_rx_callback_t rx_callback = NULL;
 static mac_tx_complete_callback_t tx_callback = NULL;
