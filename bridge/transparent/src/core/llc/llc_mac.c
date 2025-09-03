@@ -35,6 +35,11 @@ bool mac_send_frame(const uint8_t* dst_addr,
   mac_addr_copy(frame->header.dst_addr, dst_addr);
   mac_addr_copy(frame->header.src_addr, src_addr);
   frame->header.ethertype = htons(ethertype);
+
+  memcpy(frame.payload, data, data_len);
+  mac_update_fcs(&frame);
+  
+  statistics.tx_frames++;
 }
 
 void mac_set_rx_callback(mac_rx_callback_t callback) {
