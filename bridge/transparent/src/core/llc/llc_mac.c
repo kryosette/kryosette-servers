@@ -18,6 +18,8 @@ void mac_init(const uint8_t* my_mac_addr) {
   memset(&statistics, 0, sizeof(statistics));
 }
 
+bool mac_send_llc_pdu(const uint8_t* dst_addr, const uint8_t* llc_pdu, size_t pdu_len) {}
+
 void mac_set_rx_callback(mac_rx_callback_t callback) {
   
 }
