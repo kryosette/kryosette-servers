@@ -73,7 +73,7 @@ void mac_update_fcs(eth_frame_t* frame) {
 }
 
 void mac_set_rx_callback(mac_rx_callback_t callback) {
-  
+    
 }
 
 void mac_set_tx_callback(mac_rx_callback_t callback);
