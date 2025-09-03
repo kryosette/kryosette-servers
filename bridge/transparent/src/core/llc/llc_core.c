@@ -18,16 +18,20 @@ void llc_receive_ip(uint8_t *ip_packet, size_t len) {
 // ip header to llc/snap
 uint8_t llc_encapsulate_ip(const uint8_t ip_packet, size_t len) {
   size_t llc_frame_size = sizeof(llc_header_t) + sizeof(snap_header_t) + ip_len;
-  uint8_t *llc_frame = malloc(total_size);
+ 
+  uint8_t *llc_frame = (uint8_t*) malloc(llc_frame_size);
+  if (llc_frame == NULL) return NULL;
   
   llc_header_t *llc_hdr = (llc_header_t*)llc_frame;
-  llc_hdr->dsap = 0xAA;
-  llc_hdr->ssap = 0xAA;
-  llc_hdr->control = 0x03;
+  llc_hdr->dsap = DSAP_SNAP;
+  llc_hdr->ssap = SSAP_SNAP;
+  llc_hdr->control = 0x01; // type 2
 
   snap_header_t *snap_hdr = (snap_header_t*)snap_frame;
   snap_hdr->oui[0] = 0x00;
   shap_hdr->oui[1] = 0x00;
   snap_hdr->oui[2] = 0x00;
   snap_hdr->pid = htons(0x0800);
+
+  
 }
