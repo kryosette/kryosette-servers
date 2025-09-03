@@ -1,3 +1,4 @@
+#pragma once
 #ifndef MAC_H
 #define MAC_H
 
