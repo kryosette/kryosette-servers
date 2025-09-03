@@ -76,9 +76,3 @@ void mac_receive_frame(const uint8_t* frame_data, size_t frame_len) {
 void mac_update_fcs(eth_frame_t* frame) {
     frame->fcs = 0x12345678; // plug
 }
-
-void mac_set_rx_callback(mac_rx_callback_t callback) {
-    
-}
-
-void mac_set_tx_callback(mac_rx_callback_t callback);
