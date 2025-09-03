@@ -55,11 +55,19 @@ void mac_receive_frame(const uint8_t* frame_data, size_t frame_len) {
     current_state = MAC_STATE_RECEIVING;
     const eth_frame_t* frame = (const eth_frame_t*)frame_data;
 
+    uint8_t received_fcs = frame->fcs;
+  
     if (!mac_addr_equal(frame->header.dst_addr, mac_my_address) &&
        !mac_addr_is_broadcast(frame->header.dst_addr)) {
        current_state = MAC_STATE_IDLE;
        return;
     }
+
+
+}
+
+void mac_update_fcs(eth_frame_t* frame) {
+    frame->fcs = 0x12345678; // plug
 }
 
 void mac_set_rx_callback(mac_rx_callback_t callback) {
