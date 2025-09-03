@@ -24,6 +24,19 @@ bool mac_send_llc_pdu(const uint8_t* dst_addr, const uint8_t* llc_pdu, size_t pd
     return mac_send_frame(dst_addr, llc_pdu, pdu_len, ETH_P_LLC_SNAP);
 }
 
+bool mac_send_frame(const uint8_t* dst_addr, 
+                   const uint8_t* data, 
+                   size_t data_len,
+                   uint16_t ethertype) {
+  if (data_len > ETH_MTU) return false;
+
+  eth_frame_t frame;
+
+  mac_addr_copy(frame->header.dst_addr, dst_addr);
+  mac_addr_copy(frame->header.src_addr, src_addr);
+  frame->header.ethertype = htons(ethertype);
+}
+
 void mac_set_rx_callback(mac_rx_callback_t callback) {
   
 }
