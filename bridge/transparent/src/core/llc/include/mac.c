@@ -18,7 +18,7 @@
 extern const uint8_t MAC_BROADCAST_ADDR[MAC_ADDR_LEN]; // FF:FF:FF:FF:FF:FF
 extern const uint8_t MAC_NULL_ADDR[MAC_ADDR_LEN];      // 00:00:00:00:00:00
 
-#pragma pack(push, 1) // Выравнивание по 1 байту
+#pragma pack(push, 1)
 
 typedef struct {
     uint8_t dst_addr[MAC_ADDR_LEN];  // MAC назначения
