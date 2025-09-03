@@ -40,6 +40,26 @@ bool mac_send_frame(const uint8_t* dst_addr,
   mac_update_fcs(&frame);
   
   statistics.tx_frames++;
+  statistics.tx_bytes += data_len;
+
+  current_state = MAC_STATE_SENDING;
+  if (tx_callback) { tx_callback(true); }
+  current_state = MAC_STATE_IDLE;
+
+  
+}
+
+void mac_receive_frame(const uint8_t* frame_data, size_t frame_len) {
+    if (frame_len < sizeof(eth_header_t) + 4) return;
+  
+    current_state = MAC_STATE_RECEIVING;
+    const eth_frame_t* frame = (const eth_frame_t*)frame_data;
+
+    if (!mac_addr_equal(frame->header.dst_addr, mac_my_address) &&
+       !mac_addr_is_broadcast(frame->header.dst_addr)) {
+       current_state = MAC_STATE_IDLE;
+       return;
+    }
 }
 
 void mac_set_rx_callback(mac_rx_callback_t callback) {
