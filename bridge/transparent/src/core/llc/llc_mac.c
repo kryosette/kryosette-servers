@@ -46,7 +46,9 @@ bool mac_send_frame(const uint8_t* dst_addr,
   if (tx_callback) { tx_callback(true); }
   current_state = MAC_STATE_IDLE;
 
-  
+  if (rx_callback) {
+    rx_callback(frame->payload, payload_len, frame->header.src_addr);
+  }
 }
 
 void mac_receive_frame(const uint8_t* frame_data, size_t frame_len) {
