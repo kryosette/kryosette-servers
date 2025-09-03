@@ -132,6 +132,14 @@ void mac_receive_frame(const uint8_t *frame_data, size_t frame_len)
     return;
 
   current_state = MAC_STATE_RECEIVING;
+  uint8_t *temp_frame = malloc(frame_len);
+  memcpy(temp_frame, frame_data, frame_len);
+
+  // We reset the FCS field in the calculation copy
+  uint32_t *fcs_ptr = (uint32_t *)(temp_frame + frame_len - 4);
+  uint32_t received_fcs = *fcs_ptr;
+  *fcs_ptr = 0;
+
   const eth_frame_t *frame = (const eth_frame_t *)frame_data;
 
   uint8_t received_fcs = frame->fcs;
