@@ -63,7 +63,9 @@ void mac_receive_frame(const uint8_t* frame_data, size_t frame_len) {
        return;
     }
 
-
+    statistics.rx_frames++;
+    size_t payload_len = frame_len - sizeof(eth_header_t) - 4;
+    statistics.rx_bytes += payload_len;
 }
 
 void mac_update_fcs(eth_frame_t* frame) {
