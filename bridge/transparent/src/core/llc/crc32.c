@@ -16,3 +16,7 @@ void crc32_init(void) {
         crc_table[i] = crc;
     }
 }
+
+uint32_t crc32_calculate(const uint32_t *data, size_t len) {
+    
+}
