@@ -2,52 +2,43 @@
 #ifndef LLC_MODES_H
 #define LLC_MODES_H
 
-#include <stdint.h>
-#include "llc_fsm.h" // Предположим, что у тебя есть FSM для соединения
+#include <stdint>
 
-/**
- * @brief Асинхронный сбалансированный режим (Asynchronous Balanced Mode).
- *        Активный режим, в котором работает установленное соединение.
- */
-typedef struct
-{
-    llc_connection_t *active_connection; // Указатель на структуру активного соединения, если оно есть.
-    // Здесь могут быть глобальные счетчики, таймеры, буферы передачи,
-    // относящиеся к работе в этом режиме.
-    // Например:
-    // uint32_t total_i_frames_sent; // Общее количество переданных I-фреймов
-    // uint32_t total_i_frames_received; // Общее количество принятых I-фреймов
-} llc_abm_mode_t;
+typedef struct llc_connection llc_connection_t; 
 
-/**
- * @brief Асинхронный режим разъединения (Asynchronous Disconnected Mode).
- *        Режим по умолчанию, когда узел не участвует в connection-oriented общении.
- */
-typedef struct
-{
-    // В этом режиме нет активных соединений, но узел может иметь
-    // конфигурацию и статистику, относящуюся к этому состоянию.
-    // Например:
-    uint8_t dm_response_count; // Счетчик, сколько раз мы отправили DM в ответ на SABME
-    // Флаг, разрешающий отвечать на SABME (или всегда игнорировать)
-    int is_listening_for_setup;
-} llc_adm_mode_t;
+typedef struct {
+    llc_connection_t *active_connection;
 
-/**
- * @brief Глобальный контекст LLC станции.
- *        Определяет, в каком из двух фундаментальных режимов находится узел.
- */
-typedef struct
-{
-    llc_abm_mode_t abm; // Данные для ABM-режима
-    llc_adm_mode_t adm; // Данные для ADM-режима
-    // Текущий режим работы узла. Это критически важный флаг.
-    // Он определяет, какую логику применять к входящим кадрам.
-    enum
-    {
-        LLC_GLOBAL_MODE_ADM, // Узел находится в режиме разъединения
-        LLC_GLOBAL_MODE_ABM  // Узел находится в сбалансированном режиме (есть активное соединение)
-    } current_global_mode;
+    uint32_t total_i_frames_sent;     // Сколько всего I-фреймов отправили
+    uint32_t total_i_frames_received; // Сколько всего I-фреймов приняли
+    uint32_t total_rr_sent;           // Сколько всего RR отправили
+    uint32_t rej_sent_count;          // Сколько раз говорили "Повтори" (REJ)
+    uint32_t timeout_events;          // Сколько раз срабатывал таймер
+
+    uint16_t max_information_field_size; // Макс. размер данных, который готов принимать
+    uint32_t t1_timeout_value_ms;        // Базовая величина таймаута для retransmission
+} llc_abm_data_t;
+
+typedef struct {
+    uint32_t sabme_received_count;       
+    uint32_t dm_sent_count;           
+    uint32_t ua_sent_count;
+    uint8_t default_response_policy;  
+} llc_adm_data_t;
+
+typedef struct {
+  enum {
+    LLC_GLOBAL_MODE_ABM,
+    LLC_GLOBAL_MODE_ADM
+  } current_mode;
+
+  union {
+    llc_abm_data_t abm_data;
+    llc_adm_data_t abm_data;
+  }
 } llc_station_global_state_t;
 
-#endif // LLC_MODES_H
+void llc_switch_to_abm_mode(llc_station_global_state_t *state,llc_connection *conn);
+void llc_switch_to_adm_mode(llc_station_global_state_t *state);
+
+#endif
