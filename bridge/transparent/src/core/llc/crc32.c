@@ -18,5 +18,11 @@ void crc32_init(void) {
 }
 
 uint32_t crc32_calculate(const uint32_t *data, size_t len) {
-    
+    uint32_t crc = 0xFFFFFFFF;
+
+    for (size_t i = 0; i < len; i++) {
+        uint32_t table_index = ((crc >> 24) ^ byte) & 0xFFF;
+        crc = (crc << 8) ^ crc_table[table_index];
+            
+    }
 }
