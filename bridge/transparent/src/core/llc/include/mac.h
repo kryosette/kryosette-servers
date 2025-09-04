@@ -17,8 +17,8 @@
 #define ETH_P_IPV6     0x86DD   // IPv6
 
 #define ETH_MIN_FRAME_LEN      64    // Минимальная длина кадра от Преамбулы до FCS включительно (по стандарту)
-#define ETH_MIN_PAYLOAD_LEN    46    // Минимальная длина поля данных
-#define ETH_FCS_LEN            4     // Длина FCS
+#define ETH_MIN_PAYLOAD_LEN    46   
+#define ETH_FCS_LEN            4    
 
 #define ETH_MIN_RX_FRAME_LEN   (sizeof(eth_header_t) + ETH_MIN_PAYLOAD_LEN + ETH_FCS_LEN)
 
@@ -28,33 +28,33 @@ extern const uint8_t MAC_NULL_ADDR[MAC_ADDR_LEN];      // 00:00:00:00:00:00
 #pragma pack(push, 1)
 
 typedef struct {
-    uint8_t dst_addr[MAC_ADDR_LEN];  // MAC назначения
-    uint8_t src_addr[MAC_ADDR_LEN];  // MAC источника
-    uint16_t ethertype;              // Тип протокола
+    uint8_t dst_addr[MAC_ADDR_LEN];  
+    uint8_t src_addr[MAC_ADDR_LEN];  
+    uint16_t ethertype;              
 } eth_header_t;
 
 typedef struct {
-    eth_header_t header;     // Заголовок
-    uint8_t payload[ETH_MTU]; // Полезная нагрузка
-    uint32_t fcs;            // Frame Check Sequence
+    eth_header_t header;    
+    uint8_t payload[ETH_MTU];
+    uint32_t fcs;            
 } eth_frame_t;
 
 #pragma pack(pop)
 
 typedef enum {
-    MAC_STATE_IDLE,          // Ожидание
-    MAC_STATE_SENDING,       // Отправка
-    MAC_STATE_RECEIVING,     // Прием
-    MAC_STATE_ERROR          // Ошибка
+    MAC_STATE_IDLE,          
+    MAC_STATE_SENDING,      
+    MAC_STATE_RECEIVING,     
+    MAC_STATE_ERROR          
 } mac_state_t;
 
 typedef struct {
-    uint32_t tx_frames;      // Отправлено кадров
-    uint32_t rx_frames;      // Принято кадров
-    uint32_t tx_bytes;       // Отправлено байт
-    uint32_t rx_bytes;       // Принято байт
-    uint32_t crc_errors;     // Ошибок CRC
-    uint32_t collisions;     // Коллизий
+    uint32_t tx_frames;      
+    uint32_t rx_frames;      
+    uint32_t tx_bytes;       
+    uint32_t rx_bytes;       
+    uint32_t crc_errors;     
+    uint32_t collisions;     
     uint64_t rx_errors;
     uint64_t tx_errors;
 } mac_stats_t;
@@ -63,7 +63,6 @@ typedef void (*mac_rx_callback_t)(const uint8_t* data, size_t len, const uint8_t
 typedef void (*mac_tx_complete_callback_t)(bool success);
 
 
-// Инициализация MAC
 void mac_init(const uint8_t* my_mac_addr);
 
 void mac_set_rx_callback(mac_rx_callback_t callback);
