@@ -142,11 +142,15 @@ void mac_receive_frame(const uint8_t *frame_data, size_t frame_len)
         current_state = MAC_STATE_IDLE;
         return;
   }
-  // We reset the FCS field in the calculation copy
-  uint32_t *fcs_ptr = (uint32_t *)(temp_frame + frame_len - 4);
-  uint32_t received_fcs = *fcs_ptr;
-  *fcs_ptr = 0;
 
+  uint8_t *calc_frame = malloc(frame_len);
+  if (calc_frame == NULL) {
+        current_state = MAC_STATE_IDLE;
+        return;
+    }
+  memcpy(calc_frame, frame_data, frame_len);
+  
+  uint32_t received_fcs = *((uint32_t *)(calc_frame + frame_len - 4));
   if (!mac_addr_equal(frame->header.dst_addr, mac_my_address) &&
       !mac_addr_is_broadcast(frame->header.dst_addr))
   {
