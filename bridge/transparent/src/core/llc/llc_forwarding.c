@@ -14,8 +14,20 @@ void bridge_init(bridge_t *bridge, bridge_port_t *ports, size_t num_ports) {
     return;
   }
   memcpy(bridge->ports, ports, sizeof(bridge_port_t) * num_ports);
-  curr_state = PORT_STATE_LEARNING;
-  memset(curr_state, num_ports);
+  bridge->num_ports = num_ports;
+  for (int i = 0; i < num_ports; i++) {
+     bridge->ports[i].state = PORT_STATE_LEARNING;
+  }
+
+}
+
+void bridge_destroy(bridge_t *bridge) {
+    if (bridge == NULL) {
+        return;
+    }
+    free(bridge->ports);
+    bridge->ports = NULL;
+    bridge->num_ports = 0;
 }
 
 void bridge_forward_frame(bridge_t *bridge,
