@@ -84,27 +84,39 @@ bool mac_send_frame(const uint8_t *dst_addr,
                     size_t data_len,
                     uint16_t ethertype)
 {
-  if (data_len > ETH_MTU)
-    return false;
+  if (data_len > ETH_MTU) {
+      return false;
+  }
 
-  eth_frame_t frame;
-  
+  if (!tx_callback) {
+      return false;
+  }
+
+  eth_frame_t frame; 
+
   mac_addr_copy(frame.header.dst_addr, dst_addr);
-  mac_addr_copy(frame.header.src_addr, src_addr);
-  frame->header.ethertype = htons(ethertype);
+  mac_addr_copy(frame.header.src_addr, mac_my_address); 
+  frame.header.ethertype = htons(ethertype);
 
   memcpy(frame.payload, data, data_len);
+
+  size_t total_frame_len = sizeof(eth_header_t) + data_len + ETH_FCS_LEN;
+  if (total_frame_len < ETH_MIN_FRAME_LEN) {
+      size_t padding_len = ETH_MIN_FRAME_LEN - total_frame_len;
+      memset(frame.payload + data_len, 0, padding_len);
+      data_len += padding_len; 
+  }
+
   mac_update_fcs(&frame);
 
   statistics.tx_frames++;
-  statistics.tx_bytes += data_len;
+  statistics.tx_bytes += data_len; 
 
   current_state = MAC_STATE_SENDING;
-  if (tx_callback)
-  {
-    tx_callback(true);
-  }
+  bool success = tx_callback((uint8_t*)&frame, sizeof(eth_header_t) + data_len + ETH_FCS_LEN);
   current_state = MAC_STATE_IDLE;
+
+  return success;
 }
 
 /**
