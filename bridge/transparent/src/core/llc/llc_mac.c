@@ -152,16 +152,21 @@ void mac_receive_frame(const uint8_t *frame_data, size_t frame_len)
   
   uint32_t received_fcs = *((uint32_t *)(calc_frame + frame_len - ETH_FCS_LEN));
   *((uint32_t *) (calc_frame + frame_len - ETH_FCS_LEN)) = 0;
-  if (!mac_addr_equal(frame->header.dst_addr, mac_my_address) &&
-      !mac_addr_is_broadcast(frame->header.dst_addr))
-  {
-    current_state = MAC_STATE_IDLE;
-    return;
+
+  uint32_t calculated_fcs = crc32_calculate(calc_frame, frame_len);
+  free(calc_frame);
+  
+  if (received_fcs != calculated_fcs) {
+      statistics.rx_errors++;
+      current_state = MAC_STATE_IDLE;
+      return;
   }
 
   statistics.rx_frames++;
-  size_t payload_len = frame_len - sizeof(eth_header_t) - 4;
+  size_t payload_len = frame_len - sizeof(eth_header_t) - ETH_FCS_LEN;
   statistics.rx_bytes += payload_len;
+
+  current_state = MAC_STATE_IDLE;
 }
 
 /**
