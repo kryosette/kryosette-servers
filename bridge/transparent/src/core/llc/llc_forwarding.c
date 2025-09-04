@@ -47,5 +47,36 @@ void bridge_forward_frame(bridge_t *bridge,
 
     mac_table_learn(bridge->mac_table, src_mac, incoming_port_index);
     forwarding_decision_t decision;
-    int out_port_index
+    int out_port_index;
+
+    if (mac_is_broadcast(dest_mac)) {
+        decision = FLOOD;
+    } else if (mac_is_our(dest_mac, bridge->ports, bridge->num_ports)) {
+        decision = FWD_LOCAL; // Или DROP на первых порах
+    } else {
+        out_port_index = mac_table_lookup(bridge->mac_table, dest_mac);
+        if (out_port_index != -1) {
+            if (out_port_index == incoming_port_index) {
+                decision = DROP;
+            } else {
+                decision = FWD_TO_PORT;
+            }
+        } else {
+            decision = FLOOD;
+        }
+    }
+
+    switch (decision) {
+        case FLOOD:
+            break;
+        case FWD_TO_PORT:
+            bridge_send_frame_on_port(&bridge->ports[out_port_index], frame_data, frame_len);
+            break;
+        case FWD_LOCAL:
+            // Передать кадр наверх (сложно, можно заглушить)
+            break;
+        case DROP:
+        default:
+            break; // Ничего не делать
+      }
 } 
