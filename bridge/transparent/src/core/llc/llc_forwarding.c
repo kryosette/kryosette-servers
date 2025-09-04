@@ -80,3 +80,13 @@ void bridge_forward_frame(bridge_t *bridge,
             break; // Ничего не делать
       }
 } 
+
+void process_frame(const uint8_t *frame_data,
+                  size_t frame_len,
+                  const uint8_t *src_mac,
+                  int incoming_port_index) {
+    if (frame_data == NULL) {
+        return;
+    }
+                  
+}
