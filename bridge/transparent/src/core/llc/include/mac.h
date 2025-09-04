@@ -55,6 +55,8 @@ typedef struct {
     uint32_t rx_bytes;       // Принято байт
     uint32_t crc_errors;     // Ошибок CRC
     uint32_t collisions;     // Коллизий
+    uint64_t rx_errors;
+    uint64_t tx_errors;
 } mac_stats_t;
 
 typedef void (*mac_rx_callback_t)(const uint8_t* data, size_t len, const uint8_t* src_addr);
