@@ -39,9 +39,13 @@ void bridge_forward_frame(bridge_t *bridge,
                          size_t frame_len,
                          const uint8_t *src_mac,
                          int incoming_port_index) {
-  if (bridge == NULL) {
-    return;
-  }
+    if (bridge == NULL) {
+      return;
+    }
+    const uint8_t *dest_mac = frame_data;
+    const uint8_t *src_mac = frame_data + 6;
 
-  
+    mac_table_learn(bridge->mac_table, src_mac, incoming_port_index);
+    forwarding_decision_t decision;
+    int out_port_index
 } 
