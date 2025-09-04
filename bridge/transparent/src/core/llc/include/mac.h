@@ -16,6 +16,12 @@
 #define ETH_P_ARP      0x0806   // ARP
 #define ETH_P_IPV6     0x86DD   // IPv6
 
+#define ETH_MIN_FRAME_LEN      64    // Минимальная длина кадра от Преамбулы до FCS включительно (по стандарту)
+#define ETH_MIN_PAYLOAD_LEN    46    // Минимальная длина поля данных
+#define ETH_FCS_LEN            4     // Длина FCS
+
+#define ETH_MIN_RX_FRAME_LEN   (sizeof(eth_header_t) + ETH_MIN_PAYLOAD_LEN + ETH_FCS_LEN)
+
 extern const uint8_t MAC_BROADCAST_ADDR[MAC_ADDR_LEN]; // FF:FF:FF:FF:FF:FF
 extern const uint8_t MAC_NULL_ADDR[MAC_ADDR_LEN];      // 00:00:00:00:00:00
 
