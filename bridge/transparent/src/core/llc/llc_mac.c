@@ -88,9 +88,9 @@ bool mac_send_frame(const uint8_t *dst_addr,
     return false;
 
   eth_frame_t frame;
-
-  mac_addr_copy(frame->header.dst_addr, dst_addr);
-  mac_addr_copy(frame->header.src_addr, src_addr);
+  
+  mac_addr_copy(frame.header.dst_addr, dst_addr);
+  mac_addr_copy(frame.header.src_addr, src_addr);
   frame->header.ethertype = htons(ethertype);
 
   memcpy(frame.payload, data, data_len);
@@ -105,11 +105,6 @@ bool mac_send_frame(const uint8_t *dst_addr,
     tx_callback(true);
   }
   current_state = MAC_STATE_IDLE;
-
-  if (rx_callback)
-  {
-    rx_callback(frame->payload, payload_len, frame->header.src_addr);
-  }
 }
 
 /**
