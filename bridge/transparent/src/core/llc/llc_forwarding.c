@@ -6,11 +6,14 @@ static uint8_t curr_port =
 static bridge_t num_ports = NULL;
 
 void bridge_init(bridge_t *bridge, bridge_port_t *ports, size_t num_ports) {
-  if (bridge == NULL || ports == NULL || num_ports == NULL) {
+  if (bridge == NULL || ports == NULL || num_ports == 0) {
      return;
   }
-  const bridge_port_t *mac_addr = (uint8_t*) *port_data;
-  memcpy(bridge, mac_addr, num_ports);
+  bridge->ports = (bridge_port_t*)malloc(sizeof(bridge_port_t) * num_ports);
+  if (bridge->ports == NULL) {
+    return;
+  }
+  memcpy(bridge->ports, ports, sizeof(bridge_port_t) * num_ports);
   curr_state = PORT_STATE_LEARNING;
   memset(curr_state, num_ports);
 }
