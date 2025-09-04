@@ -128,21 +128,24 @@ bool mac_send_frame(const uint8_t *dst_addr,
  */
 void mac_receive_frame(const uint8_t *frame_data, size_t frame_len)
 {
-  if (frame_len < sizeof(eth_header_t) + 4)
-    return;
+  if (frame_len < ETH_MIN_RX_FRAME_LEN) {
+     statistics->rx_errors++;
+     return;
+  }
 
   current_state = MAC_STATE_RECEIVING;
-  uint8_t *temp_frame = malloc(frame_len);
-  memcpy(temp_frame, frame_data, frame_len);
+  const eth_frame_t *frame = (const eth_frame_t)*frame_data;
 
+  if (!mac_addr_equal(frame->header.dst_addr, mac_my_address) &&
+        !mac_addr_is_broadcast(frame->header.dst_addr) &&
+        !mac_addr_is_multicast(frame->header.dst_addr)) { // Let's add multicast just in case
+        current_state = MAC_STATE_IDLE;
+        return;
+  }
   // We reset the FCS field in the calculation copy
   uint32_t *fcs_ptr = (uint32_t *)(temp_frame + frame_len - 4);
   uint32_t received_fcs = *fcs_ptr;
   *fcs_ptr = 0;
-
-  const eth_frame_t *frame = (const eth_frame_t *)frame_data;
-
-  uint8_t received_fcs = frame->fcs;
 
   if (!mac_addr_equal(frame->header.dst_addr, mac_my_address) &&
       !mac_addr_is_broadcast(frame->header.dst_addr))
