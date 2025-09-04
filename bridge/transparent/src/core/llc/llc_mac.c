@@ -150,7 +150,8 @@ void mac_receive_frame(const uint8_t *frame_data, size_t frame_len)
     }
   memcpy(calc_frame, frame_data, frame_len);
   
-  uint32_t received_fcs = *((uint32_t *)(calc_frame + frame_len - 4));
+  uint32_t received_fcs = *((uint32_t *)(calc_frame + frame_len - ETH_FCS_LEN));
+  *((uint32_t *) (calc_frame + frame_len - ETH_FCS_LEN)) = 0;
   if (!mac_addr_equal(frame->header.dst_addr, mac_my_address) &&
       !mac_addr_is_broadcast(frame->header.dst_addr))
   {
