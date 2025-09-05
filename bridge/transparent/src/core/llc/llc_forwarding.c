@@ -106,7 +106,7 @@ void process_frame(const uint8_t *frame_data,
                    const uint8_t *src_mac,
                    int incoming_port_index)
 {
-    if (frame_data == NULL)
+    if (frame_len < ETH_MIN_RX_FRAME_LEN)
     {
         return;
     }
