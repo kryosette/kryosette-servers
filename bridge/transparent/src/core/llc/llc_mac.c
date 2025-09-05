@@ -217,24 +217,95 @@ const mac_stats_t *mac_get_stats()
   return &statistics;
 }
 
-static uint64_t mac_to_uint64_t(const uint8_t *mac) {
-  uint64_t res = 0;
-  for (int i = 0; i < 6; i++) {
-    res = (res << 8) | mac[i];
-  }
-  return res;
+static uint64_t mac_to_uint64(const uint8_t *mac) {
+    uint64_t result = 0;
+    for (int i = 0; i < 6; i++) {
+        result = (result << 8) | mac[i];
+    }
+    return result;
 }
 
-mac_table_t *mac_create_table(size_t size) {
-  mac_table_t *table = malloc(sizeof(size));
-  table->size = size;
-  table->count = 0;
-  table->buckets = calloc(size, sizeof(mac_table_entry_t*));
-  return table;
+mac_table_t* mac_table_create(size_t size) {
+    mac_table_t *table = malloc(sizeof(mac_table_t));
+    table->size = size;
+    table->count = 0;
+    table->buckets = calloc(size, sizeof(mac_table_entry_t*)); // Инициализируем нулями
+    return table;
 }
 
 void mac_table_destroy(mac_table_t *table) {
-  
+    for (size_t i = 0; i < table->size; i++) {
+        mac_table_entry_t *entry = table->buckets[i];
+        while (entry != NULL) {
+            mac_table_entry_t *next = entry->next;
+            free(entry);
+            entry = next;
+        }
+    }
+    free(table->buckets);
+    free(table);
 }
 
-void mac_table_learn() {}
+void mac_table_learn(mac_table_t *table, const uint8_t *mac, int port_index) {
+    uint64_t mac_key = mac_to_uint64(mac);
+    size_t index = mac_key % table->size; // Простая хэш-функция
+
+    mac_table_entry_t *entry = table->buckets[index];
+    mac_table_entry_t *prev = NULL;
+    
+    while (entry != NULL) {
+        if (entry->mac == mac_key) {
+            entry->port_index = port_index;
+            entry->last_seen = time(NULL);
+            return;
+        }
+        prev = entry;
+        entry = entry->next;
+    }
+
+    mac_table_entry_t *new_entry = malloc(sizeof(mac_table_entry_t));
+    new_entry->mac = mac_key;
+    new_entry->port_index = port_index;
+    new_entry->last_seen = time(NULL);
+    new_entry->next = NULL;
+
+    if (prev == NULL) {
+        table->buckets[index] = new_entry;
+    } else {
+        prev->next = new_entry;
+    }
+    table->count++;
+}
+
+int mac_table_lookup(mac_table_t *table, const uint8_t *mac) {
+    uint64_t mac_key = mac_to_uint64(mac);
+    size_t index = mac_key % table->size;
+    
+    mac_table_entry_t *entry = table->buckets[index];
+    while (entry != NULL) {
+        if (entry->mac == mac_key) {
+            return entry->port_index; // Нашли!
+        }
+        entry = entry->next;
+    }
+    return -1; 
+}
+
+void mac_table_ageing(mac_table_t *table) {
+    time_t now = time(NULL);
+    
+    for (size_t i = 0; i < table->size; i++) {
+        mac_table_entry_t **ptr = &table->buckets[i];
+        while (*ptr != NULL) {
+            if (now - (*ptr)->last_seen > MAC_AGEING_TIME) {
+                // Удаляем запись
+                mac_table_entry_t *to_free = *ptr;
+                *ptr = to_free->next;
+                free(to_free);
+                table->count--;
+            } else {
+                ptr = &(*ptr)->next;
+            }
+        }
+    }
+}
