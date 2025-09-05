@@ -40,6 +40,7 @@ void bridge_destroy(bridge_t *bridge)
     bridge->num_ports = 0;
 }
 
+// improve
 void bridge_forward_frame(bridge_t *bridge,
                           const uint8_t *frame_data,
                           size_t frame_len,
@@ -111,10 +112,13 @@ void process_frame(const uint8_t *frame_data,
         statistics.rx_errors++;
         return;
     }
-    if (!crc_check_is_ok(frame_data, frame_len)) {
+
+    if (!crc_check_is_ok(frame_data, frame_len)) 
+    {
         statistics.crc_errors++;
         return;
     }
+
     const uint8_t *dest_mac = &frame_data[0];
     const uint8_t *src_mac = &frame_data[6];
 
