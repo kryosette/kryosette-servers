@@ -216,3 +216,19 @@ const mac_stats_t *mac_get_stats()
 {
   return &statistics;
 }
+
+static uint64_t mac_to_uint64_t(const uint8_t *mac) {
+  uint64_t res = 0;
+  for (int i = 0; i < 6; i++) {
+    res = (res << 8) | mac[i];
+  }
+  return res;
+}
+
+mac_table_t *mac_create_table(size_t size) {
+  mac_table_t *table = malloc(sizeof(size));
+  table->size = size;
+  table->count = 0;
+  table->buckets = calloc(size, sizeof(mac_table_entry_t*));
+  return table;
+}
