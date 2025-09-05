@@ -232,3 +232,9 @@ mac_table_t *mac_create_table(size_t size) {
   table->buckets = calloc(size, sizeof(mac_table_entry_t*));
   return table;
 }
+
+void mac_table_destroy(mac_table_t *table) {
+  
+}
+
+void mac_table_learn() {}
