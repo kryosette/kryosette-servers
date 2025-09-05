@@ -108,6 +108,17 @@ void process_frame(const uint8_t *frame_data,
 {
     if (frame_len < ETH_MIN_RX_FRAME_LEN)
     {
+        statistics.rx_errors++;
         return;
     }
-}
+    if (!crc_check_is_ok(frame_data, frame_len)) {
+        statistics.crc_errors++;
+        return;
+    }
+    const uint8_t *dest_mac = &frame_data[0];
+    const uint8_t *src_mac = &frame_data[6];
+
+    statistics.rx_frames++;
+    statistics.rx_bytes += frame_len;
+
+    bridge_forward_frame(bridge, frame_data, frame_len, src_mac, incoming_port_index);
