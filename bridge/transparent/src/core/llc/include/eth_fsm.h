@@ -1,3 +1,6 @@
+#pragma once 
+#ifndef ETH_FSM_H
+#define ETH_FSM_H
 
 typedef enum {
     ETH_STATE_DISABLED,
@@ -11,8 +14,9 @@ struct eth_fsm {
     eth_state_t current_state;
     uint32_t timer;
     uint8_t mac_addr[6];
-    // STP parameters
 };
 
 void eth_fsm_init(struct eth_fsm *fsm);
 void eth_fsm_process_event(struct eth_fsm *fsm, eth_event_t event);
+
+#endif
