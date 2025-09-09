@@ -126,3 +126,4 @@ void process_frame(const uint8_t *frame_data,
     statistics.rx_bytes += frame_len;
 
     bridge_forward_frame(bridge, frame_data, frame_len, src_mac, incoming_port_index);
+}
