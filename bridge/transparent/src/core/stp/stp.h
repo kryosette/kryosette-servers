@@ -16,6 +16,16 @@
 #define STP_FORWARD_DELAY     15
 #define STP_MAX_AGE           20
 
+#define STP_HELLO_TIME        2
+#define STP_FORWARD_DELAY     15  
+#define STP_MAX_AGE           20
+
+#define PORT_STATE_DISABLED   0
+#define PORT_STATE_BLOCKING   1
+#define PORT_STATE_LISTENING  2
+#define PORT_STATE_LEARNING   3
+#define PORT_STATE_FORWARDING 4
+
 struct bridge_id {
     uint16_t priority;
     uint8_t mac[6];
