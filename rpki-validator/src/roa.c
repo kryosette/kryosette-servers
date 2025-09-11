@@ -12,6 +12,8 @@ int roa_table_init(const roa_table_t *table) {
   if (table->entries == NULL) {
     return NULL;
   }
+
+  return 0;
 }
 
 int roa_table_add(const roa_table *table, const char *ip_prefix_str, uint8_t prefix_len, uint8_t max_prefix_len, uint32_t asn, const char *source) {
@@ -64,4 +66,40 @@ int roa_table_add(const roa_table *table, const char *ip_prefix_str, uint8_t pre
   table->total_ans++;
 
   return 0;
+}
+
+const roa_entry_t *roa_table_find(const roa_table_t *table, const char *prefix_str, 
+                                 uint8_t prefix_len, uint32_t asn) {
+  for (size_t i = 0; i < table->count; i++) {
+    if (entry->info_asn != asn) {
+      return -1;
+    }
+
+    char entry_str[INET6_ADDRSTRLEN];
+    const char *result;
+
+    if (entry->family == ROA_IPv4) {
+            result = inet_ntop(AF_INET, &entry->prefix.v4, entry_str, sizeof(entry_str));
+        } else {
+            result = inet_ntop(AF_INET6, &entry->prefix.v6, entry_str, sizeof(entry_str));
+        }
+        
+        if (result && strcmp(entry_str, prefix_str) == 0 && 
+            entry->info.prefix_len == prefix_len) {
+            return entry;
+        }
+    }
+    return NULL;
+}
+
+void roa_table_cleanup(const roa_table_t *table) {
+  if (!table) return -1;
+
+  for (size_t i = 0; i < table->count; i++) {
+    if (table->entries[i].sources) {
+      free(table->entries[i].sources);
+    }
+  }
+
+  memset(table, 0, sizeof(roa_table_t));
 }
