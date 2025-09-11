@@ -101,5 +101,6 @@ void roa_table_cleanup(const roa_table_t *table) {
     }
   }
 
+  free(table->entries);
   memset(table, 0, sizeof(roa_table_t));
 }
