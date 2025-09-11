@@ -32,6 +32,17 @@ typedef struct {
     uint32_t flags;                 // Флаги (например, VALID/INVALID)
 } roa_common_info_t;
 
+typedef struct roa {
+    uint32_t asn;                       // asID (OCTET STRING в RFC)
+    ip_addr_block_t *ip_addr_blocks;    // ipAddrBlocks (SEQUENCE OF) ← ВМЕСТО ПРЕФИКСА
+    
+    time_t created_at;
+    time_t valid_until;
+    char *source_uri;
+    
+    struct roa *next;
+} roa_t;
+
 typedef union {
     struct in_addr v4;              // IPv4 адрес
     struct in6_addr v6;             // IPv6 адрес
