@@ -11,6 +11,18 @@ typedef enum {
     ROA_IPv6 = 6
 } roa_address_family_t;
 
+typedef struct ip_addr_block {
+    roa_address_family_t address_family; // addressFamily (OCTET STRING в RFC)
+    union {
+        struct in_addr v4_prefix;        // IPv4 префикс
+        struct in6_addr v6_prefix;       // IPv6 префикс
+    } prefix;
+    uint8_t prefix_length;               // Длина маски префикса
+    uint8_t max_prefix_length;           // maxLength (INTEGER в RFC)
+    
+    struct ip_addr_block *next;          // Для linked list блоков
+} ip_addr_block_t;
+
 typedef struct {
     uint32_t asn;                   // ASN
     uint8_t prefix_len;             // Длина префикса
