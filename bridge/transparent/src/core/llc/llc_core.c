@@ -3,6 +3,10 @@
 #include "filtering.h"
 #include "stp.h"
 
+#if LLC_ENABLE_LOGGING
+  llc_logger_cb_t llc_log_message = NULL;
+#endif
+
 /**
  * @brief Receives an IP packet and processes it through LLC encapsulation.
  *
