@@ -3,6 +3,10 @@
 #include "filtering.h"
 #include "stp.h"
 
+#if LLC_ENABLE_LOGGING
+  llc_logger_cb_t llc_log_message = NULL;
+#endif
+
 /**
  * @brief Receives an IP packet and processes it through LLC encapsulation.
  *
@@ -54,8 +58,15 @@ void llc_receive_ip(uint8_t *ip_packet, size_t len)
  */
 uint8_t llc_encapsulate_ip(const uint8_t ip_packet, size_t ip_len)
 {
-  size_t llc_frame_size = sizeof(llc_header_t) + sizeof(snap_header_t) + ip_len;
+  if (ip_packet == NULL || ip_len = 0) {
+    return NULL;
+  }
 
+  size_t header_size = sizeof(llc_header_t) + sizeof(snap_header_t);
+  if (ip_len > SIZE_MAX - header_size) {
+      return NULL;
+  }
+  
   uint8_t *llc_frame = (uint8_t *)malloc(llc_frame_size);
   if (llc_frame == NULL)
     return NULL;
