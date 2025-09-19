@@ -98,7 +98,7 @@ void bridge_forward_frame(bridge_t *bridge,
         break;
     case DROP:
     default:
-        break; // Ничего не делать
+        break;
     }
 }
 
@@ -113,7 +113,7 @@ void process_frame(const uint8_t *frame_data,
         return;
     }
 
-    if (!crc_check_is_ok(frame_data, frame_len)) 
+    if (!crc_check_is_ok(frame_data, frame_len))
     {
         statistics.crc_errors++;
         return;
