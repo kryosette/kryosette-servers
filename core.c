@@ -18,8 +18,7 @@ int create_raw_socket(const char *interface) {
         return -1;
     }
     
-    // Привязать сокет к интерфейсу
-    struct sockaddr_ll saddr;
+              struct sockaddr_ll saddr;
     memset(&saddr, 0, sizeof(saddr));
     saddr.sll_family = AF_PACKET;
     saddr.sll_protocol = htons(ETH_P_ALL);
