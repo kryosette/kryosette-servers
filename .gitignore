@@ -32,3 +32,6 @@ Thumbs.db
 modules.order
 Module.symvers
 Mkfile.old
+
+# bridge
+.bridge/
