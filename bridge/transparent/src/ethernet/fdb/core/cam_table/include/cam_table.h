@@ -24,10 +24,64 @@ extern "C"
 #define MAX_PRIORITY 7
 #define INVALID_INDEX 0xFFFFFFFF
 
-    /* ===== LOGGING =====  */
+    /* ===== LOGGING ===== */
 #define LOG_DIR "C:/Users/dmako/kryosette/kryosette-servers/bridge/logs/cam_table"
 #define LOG_FILE LOG_DIR "cam_table.log"
 #define MAX_LOG_SIZE (10 * 1024 * 1024)
+
+    /* ===== Cross-platform implementation of the memory barrier ===== */
+
+#if defined(__x86_64__) || defined(__i386__)
+#define MFENCE() __asm__ __volatile__("mfence" ::: "memory")
+#define SFENCE() __asm__ __volatile__("sfence" ::: "memory")
+#define LFENCE() __asm__ __volatile__("lfence" ::: "memory")
+#elif defined(__aarch64__)
+#define MFENCE() __asm__ __volatile__("dmb ish" ::: "memory")
+#define SFENCE() __asm__ __volatile__("dmb ishst" ::: "memory")
+#define LFENCE() __asm__ __volatile__("dmb ishld" ::: "memory")
+#elif defined(__arm__)
+#define MFENCE() __asm__ __volatile__("dmb" ::: "memory")
+#define SFENCE() __asm__ __volatile__("dmb st" ::: "memory")
+#define LFENCE() __asm__ __volatile__("dmb ld" ::: "memory")
+#elif defined(__powerpc__) || defined(__ppc__) || defined(__PPC__)
+#define MFENCE() __asm__ __volatile__("sync" ::: "memory")
+#define SFENCE() __asm__ __volatile__("sync" ::: "memory")
+#define LFENCE() __asm__ __volatile__("lwsync" ::: "memory")
+#elif defined(__mips__)
+#define MFENCE() __asm__ __volatile__("sync" ::: "memory")
+#define SFENCE() __asm__ __volatile__("sync" ::: "memory")
+#define LFENCE() __asm__ __volatile__("sync" ::: "memory")
+#elif defined(__riscv)
+#define MFENCE() __asm__ __volatile__("fence iorw, iorw" ::: "memory")
+#define SFENCE() __asm__ __volatile__("fence ow, ow" ::: "memory")
+#define LFENCE() __asm__ __volatile__("fence ir, ir" ::: "memory")
+#else
+#define MFENCE() __asm__ __volatile__("" ::: "memory")
+#define SFENCE() __asm__ __volatile__("" ::: "memory")
+#define LFENCE() __asm__ __volatile__("" ::: "memory")
+#warning "Using compiler memory barrier only - architecture not specifically optimized"
+#endif
+
+    /* ===== Cross-platform system calls ===== */
+
+#if defined(__linux__)
+#include <sys/syscall.h>
+#include <unistd.h>
+#define SYS_GETPID_NR SYS_getpid
+#elif defined(__FreeBSD__) || defined(__OpenBSD__) || defined(__NetBSD__)
+#include <sys/syscall.h>
+#include <unistd.h>
+#define SYS_GETPID_NR SYS_getpid
+#elif defined(__APPLE__) && defined(__MACH__)
+#include <sys/syscall.h>
+#include <unistd.h>
+#define SYS_GETPID_NR 0x2000014
+#elif defined(_WIN32)
+#include <windows.h>
+#define SYS_GETPID_NR 0
+#else
+#define SYS_GETPID_NR 0
+#endif
 
     /* ===== Data Type Definitions ===== */
 
@@ -443,6 +497,34 @@ extern "C"
     static inline bool ipv4_address_is_multicast(ipv4_addr_t ip)
     {
         return (ip & 0xF0000000) == 0xE0000000;
+    }
+
+    static inline void secure_zero_memory(void *ptr, size_t size)
+    {
+        if (unlikely(ptr == NULL || size == 0))
+            return;
+
+        volatile uint8_t *p = (volatile uint8_t *)ptr;
+
+        MFENCE();
+
+        size_t i = 0;
+        if (size >= 8)
+        {
+            volatile uint64_t *p64 = (volatile uint64_t *)ptr;
+            for (; i < size / 8; i++)
+            {
+                p64[i] = 0;
+            }
+            i *= 8;
+        }
+
+        for (; i < size; i++)
+        {
+            p[i] = 0;
+        }
+
+        MFENCE();
     }
 
 #ifdef __cplusplus

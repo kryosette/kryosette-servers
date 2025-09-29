@@ -1,4 +1,5 @@
-#include "cam_table.h"
+#include "C:\Users\dmako\kryosette\kryosette-servers\bridge\transparent\src\ethernet\fdb\core\cam_table\include\cam_table.h"
+#include "C:\Users\dmako\kryosette\kryosette-servers\third-party\smemset\include\smemset.h"
 
 /* ===== LOGGING =====  */
 void log_cam_event(const char *level, const char *message, const char *mac, int vlan)
@@ -53,7 +54,7 @@ int cam_table_init(cam_table_manager_t *manager, uft_mode_t default_mode)
     }
 
     // === ZEROING OUT THE STRUCTURE ===
-    memset(manager, 0, sizeof(cam_table_manager_t));
+    smemset(manager, 0, sizeof(cam_table_manager_t));
 
     // === MAGIC NUMBER CHECK TO DETECT STACK OVERFLOW ===
     manager->magic_number = 0xDEADBEEF;
@@ -329,7 +330,7 @@ int cam_table_clear(cam_table_t *table)
 
     if (table->entries != NULL)
     {
-        memset(table->entries, 0, table->capacity * sizeof(cam_table_entry_t));
+        smemset(table->entries, 0, table->capacity * sizeof(cam_table_entry_t));
     }
 
     table->count = 0;
@@ -339,20 +340,122 @@ int cam_table_clear(cam_table_t *table)
 
     if (table->l2_index != NULL)
     {
-        memset(table->l2_index, 0, table->capacity * sizeof(uint32_t));
+        smemset(table->l2_index, 0, table->capacity * sizeof(uint32_t));
     }
     if (table->l3_ipv4_index != NULL)
     {
-        memset(table->l3_ipv4_index, 0, table->capacity * sizeof(uint32_t));
+        smemset(table->l3_ipv4_index, 0, table->capacity * sizeof(uint32_t));
     }
     if (table->acl_index != NULL)
     {
-        memset(table->acl_index, 0, table->capacity * sizeof(uint32_t));
+        smemset(table->acl_index, 0, table->capacity * sizeof(uint32_t));
     }
 
     pthread_mutex_unlock(&table->lock);
 
     return 0;
+}
+
+int cam_table_destroy(cam_table_t *table)
+{
+    if (table == NULL)
+    {
+        log_cam_event("ERROR", "Attempt to destroy NULL CAM table", NULL, -1);
+        errno = EINVAL;
+        return -1;
+    }
+
+    char log_buffer[256];
+    snprintf(log_buffer, sizeof(log_buffer),
+             "Destroying CAM table with %u/%u entries", table->count, table->capacity);
+    log_cam_event("INFO", log_buffer, NULL, -1);
+
+    pthread_mutex_destroy(&table->lock);
+
+    if (table->entries != NULL)
+    {
+        for (uint32_t i = 0; i < table->count; i++)
+        {
+            smemset(&table->entries[i], 0, sizeof(cam_table_entry_t));
+        }
+        free(table->entries);
+    }
+
+    if (table->l2_index != NULL)
+    {
+        free(table->l2_index);
+    }
+    if (table->l3_ipv4_index != NULL)
+    {
+        free(table->l3_ipv4_index);
+    }
+    if (table->acl_index != NULL)
+    {
+        free(table->acl_index);
+    }
+
+    smemset(table, 0, sizeof(cam_table_t));
+    free(table);
+
+    log_cam_event("INFO", "CAM table destroyed successfully", NULL, -1);
+    return 0;
+}
+
+cam_table_t *cam_table_create(uint32_t max_entries)
+{
+    if (max_entries == 0)
+    {
+        log_cam_event("ERROR", "Attempt to create CAM table with zero capacity", NULL, -1);
+        errno = EINVAL;
+        return NULL;
+    }
+
+    cam_table_t *table = (cam_table_t *)calloc(1, sizeof(cam_table_t));
+    if (table == NULL)
+    {
+        log_cam_event("ERROR", "Failed to allocate CAM table structure", NULL, -1);
+        return NULL;
+    }
+
+    table->entries = (cam_table_entry_t *)calloc(max_entries, sizeof(cam_table_entry_t));
+    if (table->entries == NULL)
+    {
+        log_cam_event("ERROR", "Failed to allocate CAM table entries", NULL, -1);
+        secure_zero_memory(table, sizeof(cam_table_t));
+        free(table);
+        return NULL;
+    }
+
+    table->l2_index = (uint32_t *)calloc(max_entries, sizeof(uint32_t));
+    table->l3_ipv4_index = (uint32_t *)calloc(max_entries, sizeof(uint32_t));
+    table->acl_index = (uint32_t *)calloc(max_entries, sizeof(uint32_t));
+
+    if (table->l2_index == NULL || table->l3_ipv4_index == NULL || table->acl_index == NULL)
+    {
+        log_cam_event("ERROR", "Failed to allocate CAM table indexes", NULL, -1);
+        cam_table_destroy(table);
+        return NULL;
+    }
+
+    if (pthread_mutex_init(&table->lock, NULL) != 0)
+    {
+        log_cam_event("ERROR", "Failed to initialize CAM table mutex", NULL, -1);
+        cam_table_destroy(table);
+        return NULL;
+    }
+
+    table->capacity = max_entries;
+    table->max_entries = max_entries;
+    table->count = 0;
+    table->enable_aging = true;
+    table->aging_time = AGING_TIMER_DEFAULT;
+
+    char log_buffer[256];
+    snprintf(log_buffer, sizeof(log_buffer),
+             "CAM table created securely with capacity: %u entries", max_entries);
+    log_cam_event("INFO", log_buffer, NULL, -1);
+
+    return table;
 }
 
 /**
