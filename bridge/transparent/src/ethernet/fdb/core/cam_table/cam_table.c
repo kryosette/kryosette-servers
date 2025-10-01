@@ -458,6 +458,8 @@ cam_table_t *cam_table_create(uint32_t max_entries)
     return table;
 }
 
+utf_cam_table *cam_table() {}
+
 /**
  * @brief Allocating memory for tables
  */
