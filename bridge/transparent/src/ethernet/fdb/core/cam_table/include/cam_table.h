@@ -367,14 +367,16 @@ extern "C"
         ATOMIC_U64 allocation_failures;
     } cam_table_stats_t;
 
-    typedef struct
-    {
+    typedef struct __attribute__((packed, aligned(8)) {
         ATOMIC_U64 searches;
         ATOMIC_U64 hits;
         ATOMIC_U64 misses;
         ATOMIC_U64 collisions;
-        double hit_ratio;
+        uint32_t hit_ratio_percent;
     } cam_search_stats_t;
+
+    static_assert(sizeof(cam_search_stats_t) % 8 == 0, "Bad alignment for atomics");
+    
 
     /* ===== Function Pointer Types ===== */
 
