@@ -356,23 +356,23 @@ extern "C"
 
     typedef struct
     {
-        uint64_t entries_learned;
-        uint64_t entries_aged_out;
-        uint64_t entries_deleted;
-        uint64_t entries_moved;
-        uint64_t lookup_requests;
-        uint64_t lookup_hits;
-        uint64_t lookup_misses;
-        uint64_t hardware_errors;
-        uint64_t allocation_failures;
+        ATOMIC_U64 entries_learned;
+        ATOMIC_U64 entries_aged_out;
+        ATOMIC_U64 entries_deleted;
+        ATOMIC_U64 entries_moved;
+        ATOMIC_U64 lookup_requests;
+        ATOMIC_U64 lookup_hits;
+        ATOMIC_U64 lookup_misses;
+        ATOMIC_U64 hardware_errors;
+        ATOMIC_U64 allocation_failures;
     } cam_table_stats_t;
 
     typedef struct
     {
-        uint64_t searches;
-        uint64_t hits;
-        uint64_t misses;
-        uint64_t collisions;
+        ATOMIC_U64 searches;
+        ATOMIC_U64 hits;
+        ATOMIC_U64 misses;
+        ATOMIC_U64 collisions;
         double hit_ratio;
     } cam_search_stats_t;
 
