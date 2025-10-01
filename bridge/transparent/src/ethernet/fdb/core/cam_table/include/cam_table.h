@@ -324,19 +324,66 @@ extern "C"
 
     /* ===== Table Capacity Configuration ===== */
 
-    typedef struct
-    {
-        uft_mode_t mode;
-        const char *description;
-        uint32_t max_mac_entries;
-        uint32_t max_ipv4_host_entries;
-        uint32_t max_ipv4_mcast_entries;
-        uint32_t max_ipv6_host_entries;
-        uint32_t max_ipv4_lpm_entries;
-        uint32_t max_ipv6_lpm_entries;
-        uint32_t max_acl_entries;
-        uint32_t max_qos_entries;
-        uint32_t total_entries;
+    typedef struct {
+       uft_mode_t mode;
+       const char *description;
+    
+    /* Базовые емкости L2 */
+       uint32_t max_l2_unicast_entries;    // L2 unicast MAC
+       uint32_t max_l2_multicast_entries;  // L2 multicast
+       uint32_t max_vlan_entries;          // VLAN entries
+       uint32_t max_lag_entries;           // LAG groups
+    
+    /* IPv4 хосты и мультикаст */
+       uint32_t max_ipv4_host_entries;     // IPv4 host routes
+       uint32_t max_ipv4_mcast_entries;    // IPv4 multicast
+       uint32_t max_ipv4_arp_entries;      // ARP/ND entries
+    
+    /* IPv6 хосты и мультикаст */
+       uint32_t max_ipv6_host_entries;     // IPv6 host routes
+       uint32_t max_ipv6_mcast_entries;    // IPv6 multicast
+       
+    /* LPM (Longest Prefix Match) таблицы */
+       uint32_t max_ipv4_lpm_entries;      // IPv4 prefixes
+       uint32_t max_ipv6_lpm_entries;      // IPv6 prefixes
+       uint32_t max_ipv6_64_lpm_entries;   // IPv6 /64 prefixes
+       uint32_t max_ipv6_128_lpm_entries;  // IPv6 /128 host routes
+    
+    /* ACL и политики */
+       uint32_t max_acl_entries;           // Access Control List
+       uint32_t max_qos_entries;           // Quality of Service
+       uint32_t max_policy_entries;        // Policy rules
+       uint32_t max_meter_entries;         // Traffic meters/policers
+    
+    /* Tunnel таблицы */
+       uint32_t max_tunnel_entries;        // VXLAN, GRE, MPLS
+       uint32_t max_vxlan_vni_entries;     // VXLAN Network Identifiers
+       uint32_t max_mpls_entries;          // MPLS labels
+    
+    /* ECMP и next-hop */
+       uint32_t max_ecmp_groups;           // ECMP groups
+       uint32_t max_nexthop_entries;       // Next-hop entries
+       uint32_t max_ecmp_members_per_group; // Members per ECMP group
+    
+    /* Статистика и мониторинг */
+       uint32_t max_statistics_entries;    // Statistics counters
+       uint32_t max_mirror_entries;        // Mirror sessions
+       uint32_t max_sflow_entries;         sFlow sampling
+    
+    /* Безопасность */
+       uint32_t max_dos_entries;           // DoS protection
+       uint32_t max_blackhole_entries;     // Blackhole routes
+    
+    /* Суммарные лимиты */
+       uint32_t total_shared_entries;      // Total shared UFT entries
+       uint32_t reserved_system_entries;   // System reserved
+       uint32_t available_user_entries;    // Available for user config
+    
+    /* Характеристики памяти */
+       uint32_t hash_table_size;           // Hash table size
+       uint32_t bank_configuration;        // Memory bank config
+       uint32_t entry_width_bits;          // Bits per entry
+    
     } uft_capacity_profile_t;
 
     typedef struct
@@ -376,7 +423,6 @@ extern "C"
     } cam_search_stats_t;
 
     static_assert(sizeof(cam_search_stats_t) % 8 == 0, "Bad alignment for atomics");
-    
 
     /* ===== Function Pointer Types ===== */
 
