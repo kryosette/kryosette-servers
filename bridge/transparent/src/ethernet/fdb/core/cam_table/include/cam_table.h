@@ -96,6 +96,26 @@ extern "C"
         UFT_MODE_MAX
     } uft_mode_t;
 
+    typedef enum {
+       PKT_ACTION_FORWARD = 0,    
+       PKT_ACTION_DROP,           
+       PKT_ACTION_PENDING,        
+       PKT_ACTION_CHECK_ACL,     
+       PKT_ACTION_MIRROR,         
+       PKT_ACTION_POLICE         
+    } packet_action_t;
+
+    typedef struct {
+       ipv4_addr_t src_ip;
+       uint16_t src_port;
+       uint16_t dst_port;
+       uint8_t protocol;
+       uint8_t dscp;
+       uint32_t packet_size;
+       time_t timestamp;
+       uint32_t flow_hash; 
+    } packet_info_t;
+
     typedef enum
     {
         ENTRY_TYPE_INVALID = 0,
