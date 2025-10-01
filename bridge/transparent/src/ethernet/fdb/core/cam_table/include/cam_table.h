@@ -514,6 +514,7 @@ extern "C"
     int cam_table_sync_to_hardware(cam_table_manager_t *manager);
     int cam_table_sync_from_hardware(cam_table_manager_t *manager);
 
+    uft_capacity_profile_t *cam_table_uft_learn(uint32_t uft_modes);
     /* ===== Inline Utility Functions ===== */
 
     static inline bool mac_address_equals(const mac_address_t *mac1, const mac_address_t *mac2)
