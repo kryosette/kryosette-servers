@@ -5,6 +5,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include <time.h>
+#include "atomic_shim.h";
 
 #ifdef __cplusplus
 extern "C"
