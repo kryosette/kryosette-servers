@@ -26,3 +26,15 @@ hash ^= hash >> 17;
     
     return hash;
 }
+
+void benchmark_hash() {
+    uint64_t start = get_time_ns();
+    
+    for (int i = 0; i < 1000000; i++) {
+        test_mac.bytes[5] = i & 0xFF;  // Меняем последний байт MAC
+        eth_mac_vlan_hash(&test_mac, 100);
+    }
+    
+    uint64_t end = get_time_ns();
+    printf("Time per hash: %ld ns\n", (end - start) / 1000000);
+}
