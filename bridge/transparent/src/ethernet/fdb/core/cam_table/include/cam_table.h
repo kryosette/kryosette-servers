@@ -497,6 +497,29 @@ extern "C"
     } cam_table_manager_t;
 
     /* ===== API Function Declarations ===== */
+    /* L2 MAC lookup */
+   int uft_l2_lookup(uft_table_t *table, const mac_address_t *mac, uint16_t vlan_id, 
+                  packet_action_t *action, uint32_t *port);
+
+/* L3 IPv4 lookup */  
+   int uft_l3_ipv4_lookup(uft_table_t *table, ipv4_addr_t dst_ip,
+                       packet_action_t *action, ipv4_addr_t *next_hop);
+
+/* L3 IPv6 lookup */
+   int uft_l3_ipv6_lookup(uft_table_t *table, const ipv6_addr_t *dst_ip,
+                       packet_action_t *action, ipv6_addr_t *next_hop);
+
+/* ACL lookup */
+   int uft_acl_lookup(uft_table_t *table, const packet_info_t *pkt_info,
+                   packet_action_t *action, acl_action_t *acl_action);
+
+   int uft_add_l2_entry(uft_table_t *table, const mac_address_t *mac, uint16_t vlan_id,
+                     uint32_t port, packet_action_t action);
+
+   int uft_add_l3_ipv4_entry(uft_table_t *table, ipv4_addr_t dst_ip, ipv4_addr_t next_hop,
+                          packet_action_t action);
+
+   int uft_add_acl_entry(uft_table_t *table, const cam_acl_ipv4_entry_t *acl_entry);
 
     /* CAM Table Storage Management */
     cam_table_t *cam_table_create(uint32_t max_entries);
