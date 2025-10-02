@@ -474,8 +474,87 @@ utf_cam_table *uft_table(uft_mode_t uft_mode, const char *decs) {
     return table;
 }
 
-int uft_table_lookup(uft_table_t *table, const void key, size_t key_len, packet_action_t *action) {
+/**
+ * Поиск MAC адреса в UFT таблице (аппаратный/быстрый поиск)
+ * 
+ * @param table UFT таблица
+ * @param mac MAC адрес для поиска
+ * @param vlan_id VLAN ID
+ * @param action Найденное действие (output)
+ * @param output_port Найденный выходной порт (output)
+ * @return 0 если найден, -1 если не найден, -2 при ошибке
+ */
+int uft_l2_lookup(uft_table_t *table, const mac_address_t *mac, uint16_t vlan_id,
+                  packet_action_t *action, uint32_t *output_port) 
+{
+    if (!table || !mac || !action || !output_port) {
+        return -2;  // EINVAL
+    }
     
+    if (table->mode != UFT_MODE_L2_BRIDGING && table->mode != UFT_MODE_HYBRID) {
+        return -2;  // Wrong mode
+    }
+    
+    atomic_fetch_add(&table->l2_lookups, 1);
+    
+    pthread_mutex_lock(&table->lock);
+    
+    /* Быстрый поиск по MAC + VLAN */
+    for (uint32_t i = 0; i < table->l2_count; i++) {
+        uft_l2_entry_t *entry = &table->l2_entries[i];
+        
+        if ((entry->flags & UFT_L2_FLAG_VALID) &&
+            mac_address_equals(&entry->mac_address, mac) &&
+            entry->vlan_id == vlan_id) {
+            
+            /* ХИТ - нашли запись */
+            *action = entry->action;
+            *output_port = entry->output_port;
+            
+            pthread_mutex_unlock(&table->lock);
+            atomic_fetch_add(&table->l2_hits, 1);
+            return 0;
+        }
+    }
+    
+    pthread_mutex_unlock(&table->lock);
+    atomic_fetch_add(&table->l2_misses, 1);
+    return -1;  // Not found
+}
+
+/**
+ * Добавление L2 записи в UFT таблицу
+ */
+int uft_add_l2_entry(uft_table_t *table, const mac_address_t *mac, uint16_t vlan_id,
+                     uint32_t output_port, packet_action_t action) 
+{
+    if (!table || !mac) {
+        return -1;
+    }
+    
+    pthread_mutex_lock(&table->lock);
+    
+    /* Проверяем есть ли место */
+    if (table->l2_count >= table->l2_capacity) {
+        pthread_mutex_unlock(&table->lock);
+        return -2;  // Table full
+    }
+    
+    /* Создаем новую запись */
+    uft_l2_entry_t *entry = &table->l2_entries[table->l2_count];
+    
+    entry->hw_index = table->l2_count;
+    memcpy(&entry->mac_address, mac, sizeof(mac_address_t));
+    entry->vlan_id = vlan_id;
+    entry->output_port = output_port;
+    entry->action = action;
+    entry->timestamp = time(NULL);
+    entry->flags = UFT_L2_FLAG_VALID;
+    
+    table->l2_count++;
+    
+    pthread_mutex_unlock(&table->lock);
+    return 0;
 }
 
 /**
