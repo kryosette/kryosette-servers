@@ -476,6 +476,7 @@ extern "C"
         uft_capacity_profile_t capacity_profile;
         aging_timer_t aging_time;
         cam_entry_callback_t cam_entry;
+        uft_table_t *uft_table;
         cam_table_t *cam_table;
 
         /* Statistics */
@@ -584,34 +585,6 @@ extern "C"
     static inline bool ipv4_address_is_multicast(ipv4_addr_t ip)
     {
         return (ip & 0xF0000000) == 0xE0000000;
-    }
-
-    static inline void secure_zero_memory(void *ptr, size_t size)
-    {
-        if (unlikely(ptr == NULL || size == 0))
-            return;
-
-        volatile uint8_t *p = (volatile uint8_t *)ptr;
-
-        MFENCE();
-
-        size_t i = 0;
-        if (size >= 8)
-        {
-            volatile uint64_t *p64 = (volatile uint64_t *)ptr;
-            for (; i < size / 8; i++)
-            {
-                p64[i] = 0;
-            }
-            i *= 8;
-        }
-
-        for (; i < size; i++)
-        {
-            p[i] = 0;
-        }
-
-        MFENCE();
     }
 
 #ifdef __cplusplus
