@@ -219,6 +219,20 @@ extern "C"
         uint8_t pad[1];
     } cam_l2_entry_t;
 
+typedef struct __attribute__((packed, aligned(4))) {
+    uint32_t hw_index;           /**< Аппаратный индекс */
+    mac_address_t mac_address;   /**< MAC адрес */
+    uint16_t vlan_id;            /**< VLAN ID */
+    uint32_t output_port;        /**< Выходной порт */
+    packet_action_t action;      /**< Действие */
+    time_t timestamp;            /**< Время добавления */
+    uint8_t flags;               /**< Флаги */
+} uft_l2_entry_t;
+
+#define UFT_L2_FLAG_VALID     (1 << 0)
+#define UFT_L2_FLAG_STATIC    (1 << 1) 
+#define UFT_L2_FLAG_AGED      (1 << 2)
+
     /* ===== CAM Table Storage Structure ===== */
 
     typedef struct cam_table_entry
