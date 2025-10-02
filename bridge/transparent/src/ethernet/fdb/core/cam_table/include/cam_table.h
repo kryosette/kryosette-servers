@@ -263,6 +263,23 @@ extern "C"
 
     } cam_table_t;
 
+    typedef struct uft_table {
+        uft_mode_t mode;
+        uft_capacity_profile_t capacity;
+    
+    /* Аппаратные записи */
+        uft_hw_entry_t *entries;
+        uint32_t entry_count;
+        uint32_t max_entries;
+    
+    /* Статистика */
+        ATOMIC_U64 lookups;
+        ATOMIC_U64 hits;
+    
+    /* Синхронизация с CAM */
+        pthread_mutex_t lock;
+    } uft_table_t;
+
 #define L2_ENTRY_FLAG_LOCAL (1 << 0)
 #define L2_ENTRY_FLAG_ROUTER_MAC (1 << 1)
 #define L2_ENTRY_FLAG_SECURE (1 << 2)
