@@ -86,15 +86,14 @@ extern "C"
 
     /* ===== Data Type Definitions ===== */
 
-    typedef enum
-    {
-        UFT_MODE_0 = 0, /**< Maximize IPv4 LPM routes */
-        UFT_MODE_1 = 1, /**< Balanced profile */
-        UFT_MODE_2 = 2, /**< Default mode - maximize MAC addresses */
-        UFT_MODE_3 = 3, /**< Hybrid profile */
-        UFT_MODE_4 = 4, /**< Specialized applications */
-        UFT_MODE_MAX
-        UFT_NULL
+    typedef enum {
+       UFT_MODE_L2_BRIDGING = 0,   /**< Pure L2 MAC forwarding */
+       UFT_MODE_L3_IPV4_ROUTING,   /**< L3 IPv4 routing */
+       UFT_MODE_L3_IPV6_ROUTING,   /**< L3 IPv6 routing */
+       UFT_MODE_HYBRID,            /**< Mixed L2/L3 forwarding */
+       UFT_MODE_SECURITY,          /**< Security-focused (ACL heavy) */
+       UFT_MODE_QOS,               /**< QoS-focused */
+       UFT_MODE_MAX
     } uft_mode_t;
 
     typedef enum {
