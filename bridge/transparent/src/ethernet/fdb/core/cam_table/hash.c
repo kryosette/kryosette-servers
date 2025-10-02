@@ -9,7 +9,7 @@ uint32_t eth_mac_vlan_hash(const mac_address_t *mac, uint16_t vlan_id)
     for (int i = 0; i < MAC_ADDRESS_LENGTH; i++) {
         hash += mac->bytes[i];
         hash ^= hash << 13;
-        hash ^= hash << 7;
+        hash ^= hash >> 7;
         hash ^= hash << 17;
     }
 
