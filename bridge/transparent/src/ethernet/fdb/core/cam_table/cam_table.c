@@ -474,6 +474,10 @@ utf_cam_table *uft_table(uft_mode_t uft_mode, const char *decs) {
     return table;
 }
 
+int uft_table_lookup(uft_table_t *table, const void key, size_t key_len, packet_action_t *action) {
+    
+}
+
 /**
  * @brief Allocating memory for tables
  */
