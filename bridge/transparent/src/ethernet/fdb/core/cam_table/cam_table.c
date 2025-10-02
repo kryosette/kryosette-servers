@@ -507,7 +507,6 @@ int uft_l2_lookup(uft_table_t *table, const mac_address_t *mac, uint16_t vlan_id
             mac_address_equals(&entry->mac_address, mac) &&
             entry->vlan_id == vlan_id) {
             
-            /* ХИТ - нашли запись */
             *action = entry->action;
             *output_port = entry->output_port;
             
@@ -519,7 +518,7 @@ int uft_l2_lookup(uft_table_t *table, const mac_address_t *mac, uint16_t vlan_id
     
     pthread_mutex_unlock(&table->lock);
     atomic_fetch_add(&table->l2_misses, 1);
-    return -1;  // Not found
+    return -1;  
 }
 
 /**
