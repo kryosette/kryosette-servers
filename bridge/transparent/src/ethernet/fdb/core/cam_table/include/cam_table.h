@@ -6,6 +6,7 @@
 #include <stdbool.h>
 #include <time.h>
 #include "atomic_shim.h";
+#include "hash.h";
 
 #ifdef __cplusplus
 extern "C"
@@ -24,6 +25,8 @@ extern "C"
 #define MAX_PORT_NUMBER 255
 #define MAX_PRIORITY 7
 #define INVALID_INDEX 0xFFFFFFFF
+
+#define L2_HASH_TABLE 
 
     /* ===== LOGGING ===== */
 #define LOG_DIR "C:/Users/dmako/kryosette/kryosette-servers/bridge/logs/cam_table"
@@ -292,6 +295,8 @@ typedef struct __attribute__((packed, aligned(4))) {
     
     /* Синхронизация с CAM */
         pthread_mutex_t lock;
+
+        L2_HASH_TABLE *hash_table;
     } uft_table_t;
 
 #define L2_ENTRY_FLAG_LOCAL (1 << 0)
