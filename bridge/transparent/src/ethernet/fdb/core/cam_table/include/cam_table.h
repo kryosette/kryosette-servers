@@ -94,6 +94,7 @@ extern "C"
         UFT_MODE_3 = 3, /**< Hybrid profile */
         UFT_MODE_4 = 4, /**< Specialized applications */
         UFT_MODE_MAX
+        UFT_NULL
     } uft_mode_t;
 
     typedef enum {
