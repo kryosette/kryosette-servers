@@ -24,5 +24,6 @@ int bridge_set_promiscuous(network_interface_t *iface);
 int bridge_receive_frame(network_interface_t *iface, uint8_t *buffer, size_t buffer_size);
 int bridge_forward_frame(const uint8_t *frame, size_t frame_size, const char *target_interface);
 int process_ethernet_frame(uint8_t *buffer, ssize_t data_size, int incoming_port_index);
+int
 
 #endif
