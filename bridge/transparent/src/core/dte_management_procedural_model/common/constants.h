@@ -19,4 +19,4 @@
 #define SPEED_100MBPS 100000000 // 100 Mb/s in bits per second
 #define SPEED_1GBPS 1000000000  // 1 Gb/s in bits per second
 
-#endif // DTE_CONSTANTS_H
+#endif
