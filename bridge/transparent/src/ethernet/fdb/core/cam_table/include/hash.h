@@ -2,9 +2,9 @@
 #ifndef HASH_H
 #define HASH_H
 
+#include "cam_table.h"
 #include <stdint.h>
 #include <stddef.h>
-#include "cam_table.h" // Для mac_address_t и других структур
 
 #ifdef __cplusplus
 extern "C"

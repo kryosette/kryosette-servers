@@ -17,18 +17,19 @@
 #ifndef CAM_TABLE_H
 #define CAM_TABLE_H
 
+#include <assert.h>
 #include <stdint.h>
 #include <stdbool.h>
 #include <time.h>
 #include "atomic_shim.h"
-#include "hash.h"
 
 #ifdef __cplusplus
 extern "C"
 {
 #endif
 
-/* ===== Constants and Configuration ===== */
+    typedef struct cam_table_entry cam_table_entry_t;
+    typedef struct uft_hw_entry_t uft_hw_entry_t;
 
 /**
  * CAM Table Version Information
@@ -48,10 +49,33 @@ extern "C"
 #define MAX_PRIORITY 7           /**< Maximum TCAM priority value */
 #define INVALID_INDEX 0xFFFFFFFF /**< Invalid table index indicator */
 
-/**
- * Feature Flags
- */
-#define L2_HASH_TABLE /**< Enable hash-based L2 table lookups */
+    /**
+     * MAC Address Structure
+     * 48-bit Ethernet MAC address
+     */
+    typedef struct
+    {
+        uint8_t bytes[MAC_ADDRESS_LENGTH]; /**< Raw MAC address bytes */
+    } mac_address_t;
+
+    /** IPv4 Address - 32-bit unsigned integer in network byte order */
+    typedef uint32_t ipv4_addr_t;
+
+    /**
+     * IPv6 Address Structure
+     * 128-bit IPv6 address
+     */
+    typedef struct
+    {
+        uint8_t bytes[IPV6_ADDRESS_LENGTH]; /**< Raw IPv6 address bytes */
+    } ipv6_addr_t;
+
+/* ===== Constants and Configuration ===== */
+
+// /**
+//  * Feature Flags
+//  */
+// #define L2_HASH_TABLE /**< Enable hash-based L2 table lookups */
 
 /* ===== Logging Configuration ===== */
 
@@ -254,27 +278,6 @@ extern "C"
     /* ===== Basic Data Structures ===== */
 
     /**
-     * MAC Address Structure
-     * 48-bit Ethernet MAC address
-     */
-    typedef struct
-    {
-        uint8_t bytes[MAC_ADDRESS_LENGTH]; /**< Raw MAC address bytes */
-    } mac_address_t;
-
-    /** IPv4 Address - 32-bit unsigned integer in network byte order */
-    typedef uint32_t ipv4_addr_t;
-
-    /**
-     * IPv6 Address Structure
-     * 128-bit IPv6 address
-     */
-    typedef struct
-    {
-        uint8_t bytes[IPV6_ADDRESS_LENGTH]; /**< Raw IPv6 address bytes */
-    } ipv6_addr_t;
-
-    /**
      * IPv4 Prefix Structure
      * IP address with prefix length for LPM operations
      */
@@ -351,26 +354,6 @@ extern "C"
     /* ===== CAM Table Storage Structure ===== */
 
     /**
-     * Unified CAM Table Entry
-     * Union of all possible entry types with common header
-     */
-    typedef struct cam_table_entry
-    {
-        cam_entry_header_t header; /**< Common entry metadata */
-        union
-        {
-            cam_l2_entry_t l2_entry;                 /**< Layer 2 MAC entry */
-            cam_l3_ipv4_host_entry_t l3_ipv4_host;   /**< IPv4 host route */
-            cam_l3_ipv4_lpm_entry_t l3_ipv4_lpm;     /**< IPv4 LPM route */
-            cam_l3_ipv6_lpm_entry_t l3_ipv6_lpm;     /**< IPv6 LPM route */
-            cam_l3_ipv4_mcast_entry_t l3_ipv4_mcast; /**< IPv4 multicast */
-            cam_acl_ipv4_entry_t acl_entry;          /**< IPv4 ACL entry */
-            cam_qos_entry_t qos_entry;               /**< QoS policy entry */
-            uint8_t raw_data[128];                   /**< Raw data for hardware */
-        } data;
-    } cam_table_entry_t;
-
-    /**
      * Main CAM Table Structure
      * Manages storage and indexing of all CAM entries
      */
@@ -399,30 +382,6 @@ extern "C"
         /* Synchronization */
         pthread_mutex_t lock; /**< Mutex for thread safety */
     } cam_table_t;
-
-    /**
-     * Unified Forwarding Table Structure
-     * Hardware-focused table with performance counters
-     */
-    typedef struct uft_table
-    {
-        uft_mode_t mode;                 /**< Current forwarding mode */
-        uft_capacity_profile_t capacity; /**< Capacity profile */
-
-        /* Hardware entries */
-        uft_hw_entry_t *entries; /**< Hardware entry array */
-        uint32_t entry_count;    /**< Current entry count */
-        uint32_t max_entries;    /**< Maximum hardware entries */
-
-        /* Performance statistics */
-        ATOMIC_U64 lookups; /**< Total lookup operations */
-        ATOMIC_U64 hits;    /**< Successful lookups */
-
-        /* Synchronization */
-        pthread_mutex_t lock; /**< Table access mutex */
-
-        L2_HASH_TABLE *hash_table; /**< Hash table for L2 lookups */
-    } uft_table_t;
 
 /* L2 Entry Specific Flags */
 #define L2_ENTRY_FLAG_LOCAL (1 << 0)      /**< Locally administered MAC */
@@ -646,6 +605,50 @@ extern "C"
         uint32_t hit_ratio_percent; /**< Hit ratio percentage */
     } cam_search_stats_t;
 
+    /**
+     * Unified CAM Table Entry
+     * Union of all possible entry types with common header
+     */
+    typedef struct cam_table_entry
+    {
+        cam_entry_header_t header; /**< Common entry metadata */
+        union
+        {
+            cam_l2_entry_t l2_entry;                 /**< Layer 2 MAC entry */
+            cam_l3_ipv4_host_entry_t l3_ipv4_host;   /**< IPv4 host route */
+            cam_l3_ipv4_lpm_entry_t l3_ipv4_lpm;     /**< IPv4 LPM route */
+            cam_l3_ipv6_lpm_entry_t l3_ipv6_lpm;     /**< IPv6 LPM route */
+            cam_l3_ipv4_mcast_entry_t l3_ipv4_mcast; /**< IPv4 multicast */
+            cam_acl_ipv4_entry_t acl_entry;          /**< IPv4 ACL entry */
+            cam_qos_entry_t qos_entry;               /**< QoS policy entry */
+            uint8_t raw_data[128];                   /**< Raw data for hardware */
+        } data;
+    } cam_table_entry_t;
+
+    /**
+     * Unified Forwarding Table Structure
+     * Hardware-focused table with performance counters
+     */
+    typedef struct uft_table
+    {
+        uft_mode_t mode;                 /**< Current forwarding mode */
+        uft_capacity_profile_t capacity; /**< Capacity profile */
+
+        /* Hardware entries */
+        uft_hw_entry_t *entries; /**< Hardware entry array */
+        uint32_t entry_count;    /**< Current entry count */
+        uint32_t max_entries;    /**< Maximum hardware entries */
+
+        /* Performance statistics */
+        ATOMIC_U64 lookups; /**< Total lookup operations */
+        ATOMIC_U64 hits;    /**< Successful lookups */
+
+        /* Synchronization */
+        pthread_mutex_t lock; /**< Table access mutex */
+
+        // L2_HASH_TABLE *hash_table; /**< Hash table for L2 lookups */
+    } uft_table_t;
+
     /* Ensure proper alignment for atomic operations */
     static_assert(sizeof(cam_search_stats_t) % 8 == 0, "Bad alignment for atomics");
 
@@ -743,7 +746,7 @@ extern "C"
     int cam_table_set_aging_time(cam_table_manager_t *manager, aging_timer_t aging_time);
 
     /* Entry Management */
-    int cam_table_add_l2_entry(cam_table_manager_t *manager, const cam_l2_entry_t *entry);
+    // int cam_table_add_l2_entry(cam_table_manager_t *manager, const cam_l2_entry_t *entry);
     int cam_table_add_l3_ipv4_host_entry(cam_table_manager_t *manager, const cam_l3_ipv4_host_entry_t *entry);
     int cam_table_add_l3_ipv4_lpm_entry(cam_table_manager_t *manager, const cam_l3_ipv4_lpm_entry_t *entry);
     int cam_table_add_acl_entry(cam_table_manager_t *manager, const cam_acl_ipv4_entry_t *entry);
@@ -753,7 +756,7 @@ extern "C"
     int cam_table_clear_entries(cam_table_manager_t *manager, cam_entry_type_t type);
 
     /* Search and Lookup Operations */
-    int cam_table_find_l2_entry(const cam_table_manager_t *manager, const mac_address_t *mac, uint16_t vlan_id, cam_l2_entry_t *result);
+    // int cam_table_find_l2_entry(const cam_table_manager_t *manager, const mac_address_t *mac, uint16_t vlan_id, cam_l2_entry_t *result);
     int cam_table_find_l3_ipv4_host_entry(const cam_table_manager_t *manager, ipv4_addr_t ip_address, cam_l3_ipv4_host_entry_t *result);
     int cam_table_find_lpm_ipv4(const cam_table_manager_t *manager, ipv4_addr_t ip_address, cam_l3_ipv4_lpm_entry_t *result);
 
@@ -856,3 +859,5 @@ extern "C"
 #endif
 
 #endif /* CAM_TABLE_H */
+
+#include "hash.h"

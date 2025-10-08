@@ -1,5 +1,6 @@
 #include "C:\Users\dmako\kryosette\kryosette-servers\bridge\transparent\src\ethernet\fdb\core\cam_table\include\cam_table.h"
 #include "C:\Users\dmako\kryosette\kryosette-servers\third-party\smemset\include\smemset.h"
+#include "bridge\transparent\src\ethernet\fdb\core\cam_table\include\cam_table_operations.h"
 
 /* ===== LOGGING =====  */
 void log_cam_event(const char *level, const char *message, const char *mac, int vlan)
@@ -409,6 +410,8 @@ cam_table_t *cam_table_create(uint32_t max_entries)
         errno = EINVAL;
         return NULL;
     }
+
+    FILE *cam_table_txt = fopen("cam_table.txt", "w");
 
     cam_table_t *table = (cam_table_t *)calloc(1, sizeof(cam_table_t));
     if (table == NULL)

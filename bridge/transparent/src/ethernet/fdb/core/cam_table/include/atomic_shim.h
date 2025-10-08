@@ -21,3 +21,4 @@
 #define ATOMIC_U64 _Atomic uint64_t
 #define ATOMIC_INC(ptr) atomic_fetch_add(ptr, 1)
 #endif
+#endif

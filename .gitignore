@@ -35,3 +35,6 @@ Mkfile.old
 
 # bridge
 .bridge/
+
+# logging
+ddos_block.log
