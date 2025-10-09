@@ -20,10 +20,8 @@
 #include <errno.h>
 #include <pthread.h>
 
-// ===== CAM TABLE INTEGRATION =====
 #include "bridge/transparent/src/ethernet/fdb/core/cam_table/include/cam_table_operations.h"
 
-// Структура для связи IP-MAC
 typedef struct
 {
     char ip[16];
@@ -32,7 +30,6 @@ typedef struct
     int block_count;
 } ip_mac_mapping_t;
 
-// Структура для заблокированных IP
 typedef struct
 {
     char ip[16];
@@ -42,30 +39,24 @@ typedef struct
     char reason[100];
 } blocked_ip_t;
 
-// Структура для метрик безопасности
 typedef struct
 {
-    // BASIC TRAFFIC
     unsigned long aFramesTransmittedOK;
     unsigned long aFramesReceivedOK;
     unsigned long aOctetsTransmittedOK;
     unsigned long aOctetsReceivedOK;
 
-    // ERROR METRICS
     unsigned long aFrameCheckSequenceErrors;
     unsigned long aAlignmentErrors;
 
-    // BROADCAST/MULTICAST
     unsigned long aBroadcastFramesReceivedOK;
     unsigned long aMulticastFramesReceivedOK;
     unsigned long aBroadcastFramesXmittedOK;
     unsigned long aMulticastFramesXmittedOK;
 
-    // SECURITY FLAGS
     int estimated_promiscuous;
     int potential_scan_detected;
 
-    // ДОПОЛНИТЕЛЬНЫЕ МЕТРИКИ
     unsigned long syn_packets;
     unsigned long udp_packets;
     unsigned long icmp_packets;
@@ -74,7 +65,6 @@ typedef struct
     time_t last_calc_time;
     unsigned long last_packet_count;
 
-    // ДЕТЕКТОР АТАК
     char attacker_ip[16];
     uint8_t attacker_mac[6];
     int attack_detected;
@@ -126,8 +116,6 @@ uint8_t *find_mac_by_ip(anomaly_detector_t *detector, const char *ip);
 void security_handle_attack_detection(anomaly_detector_t *detector, int threat_level);
 void start_comprehensive_monitoring(const char *interface, cam_table_manager_t *cam_manager);
 
-// ===== IMPLEMENTATION =====
-
 void handle_signal(int sig)
 {
     stop_monitoring = 1;
@@ -150,17 +138,14 @@ void block_ip(const char *ip, const uint8_t *mac, const char *reason, int durati
     printf("🔒 L2 БЛОКИРОВКА MAC: %02X:%02X:%02X:%02X:%02X:%02X | IP: %s | Причина: %s\n",
            mac[0], mac[1], mac[2], mac[3], mac[4], mac[5], ip, reason);
 
-    // 1. L2 БЛОКИРОВКА ПО MAC (настоящая)
     snprintf(command, sizeof(command),
              "ebtables -A INPUT -s %02X:%02X:%02X:%02X:%02X:%02X -j DROP 2>/dev/null",
              mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
     system(command);
 
-    // 2. L3 блокировка по IP (дополнительно)
     snprintf(command, sizeof(command), "iptables -A INPUT -s %s -j DROP 2>/dev/null", ip);
     system(command);
 
-    // 3. Логирование
     FILE *log_file = fopen("ddos_block.log", "a");
     if (log_file)
     {
@@ -173,7 +158,7 @@ void block_ip(const char *ip, const uint8_t *mac, const char *reason, int durati
         fclose(log_file);
     }
 }
-// РАЗБЛОКИРОВКА IP
+
 void unblock_ip(const char *ip)
 {
     char command[256];
@@ -185,7 +170,6 @@ void unblock_ip(const char *ip)
     system(command);
 }
 
-// ДОБАВЛЕНИЕ IP В СПИСОК БЛОКИРОВКИ С ЗАПИСЬЮ В CAM ТАБЛИЦУ
 void add_to_block_list(anomaly_detector_t *detector, const char *ip, const uint8_t *mac, const char *reason)
 {
     pthread_mutex_lock(&detector->block_mutex);
@@ -692,8 +676,72 @@ void print_blocked_ips(anomaly_detector_t *detector)
 
     pthread_mutex_unlock(&detector->block_mutex);
 }
+int cam_table_block_mac(cam_table_manager_t *manager, const uint8_t *mac_bytes,
+                        uint16_t vlan_id, const char *reason)
+{
+    return 0; // заглушка
+}
 
-// ГЛАВНАЯ ФУНКЦИЯ МОНИТОРИНГА С ИНТЕГРАЦИЕЙ CAM ТАБЛИЦЫ
+int cam_table_unblock_mac(cam_table_manager_t *manager, const uint8_t *mac_bytes,
+                          uint16_t vlan_id)
+{
+    return 0; // заглушка
+}
+
+int cam_table_set_mac_pending(cam_table_manager_t *manager, const uint8_t *mac_bytes,
+                              uint16_t vlan_id, const char *reason)
+{
+    return 0; // заглушка
+}
+
+int cam_table_init(cam_table_manager_t *manager, uft_mode_t default_mode)
+{
+    if (!manager)
+        return -1;
+
+    if (create_cam_directory() != 0)
+    {
+        printf("❌ Не удалось создать директорию для CAM таблицы\n");
+        return -1;
+    }
+
+    const char *filename = "/var/lib/cam-table/cam.bin";
+
+    FILE *test_file = fopen(filename, "rb");
+    if (!test_file)
+    {
+        printf("🆕 Создаю новую CAM таблицу: %s\n", filename);
+        if (init_cam_file(filename, DEFAULT_CAPACITY) != 0)
+        {
+            printf("❌ Ошибка создания CAM файла\n");
+            return -1;
+        }
+    }
+    else
+    {
+        fclose(test_file);
+        printf("📂 Загружаю существующую CAM таблицу\n");
+    }
+
+    manager->current_mode = default_mode;
+    manager->cam_table = cam_table_create(DEFAULT_CAPACITY);
+    manager->initialized = true;
+    manager->magic_number = 0xDEADBEEF;
+
+    // Загружаем данные из файла в память
+    // (здесь будет код загрузки существующих записей)
+
+    printf("✅ CAM таблица инициализирована: %s\n", filename);
+    printf("   Режим: %d, Емкость: %d записей\n", default_mode, DEFAULT_CAPACITY);
+
+    return 0;
+}
+
+int cam_table_cleanup(cam_table_manager_t *manager)
+{
+    return 0; // заглушка
+}
+
 void start_comprehensive_monitoring(const char *interface, cam_table_manager_t *cam_manager)
 {
     anomaly_detector_t detector;
@@ -801,6 +849,8 @@ int main(int argc, char *argv[])
 {
     printf("=== 🐧 СИСТЕМА АВТОМАТИЧЕСКОЙ БЛОКИРОВКИ АТАК С CAM ТАБЛИЦЕЙ ===\n\n");
 
+    cam_table_t *cam = cam_table_init("/var/lib/cam-table/cam.bin", 100000);
+
     signal(SIGINT, handle_signal);
     signal(SIGTERM, handle_signal);
 
@@ -840,32 +890,4 @@ int main(int argc, char *argv[])
     printf("🧹 CAM таблица очищена\n");
 
     return 0;
-}
-
-int cam_table_block_mac(cam_table_manager_t *manager, const uint8_t *mac_bytes,
-                        uint16_t vlan_id, const char *reason)
-{
-    return 0; // заглушка
-}
-
-int cam_table_unblock_mac(cam_table_manager_t *manager, const uint8_t *mac_bytes,
-                          uint16_t vlan_id)
-{
-    return 0; // заглушка
-}
-
-int cam_table_set_mac_pending(cam_table_manager_t *manager, const uint8_t *mac_bytes,
-                              uint16_t vlan_id, const char *reason)
-{
-    return 0; // заглушка
-}
-
-int cam_table_init(cam_table_manager_t *manager, uft_mode_t default_mode)
-{
-    return 0; // заглушка
-}
-
-int cam_table_cleanup(cam_table_manager_t *manager)
-{
-    return 0; // заглушка
 }
