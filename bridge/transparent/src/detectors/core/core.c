@@ -1,175 +1,13 @@
-#define _GNU_SOURCE
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <unistd.h>
-#include <time.h>
-#include <sys/socket.h>
-#include <sys/ioctl.h>
-#include <fcntl.h>
-#include <netinet/in.h>
-#include <netinet/ip.h>
-#include <netinet/tcp.h>
-#include <netinet/udp.h>
-#include <netinet/if_ether.h>
-#include <net/if.h>
-#include <net/ethernet.h>
-#include <arpa/inet.h>
-#include <linux/if_packet.h>
-#include <signal.h>
-#include <errno.h>
-#include <pthread.h>
+#include "core.h"
 
-#include "bridge/transparent/src/ethernet/fdb/core/cam_table/include/cam_table_operations.h"
-
-typedef struct
-{
-    char ip[16];
-    uint8_t mac[6];
-    time_t last_seen;
-    int block_count;
-} ip_mac_mapping_t;
-
-typedef struct
-{
-    char ip[16];
-    uint8_t mac[6];
-    time_t block_time;
-    int block_duration;
-    char reason[100];
-} blocked_ip_t;
-
-typedef struct
-{
-    unsigned long aFramesTransmittedOK;
-    unsigned long aFramesReceivedOK;
-    unsigned long aOctetsTransmittedOK;
-    unsigned long aOctetsReceivedOK;
-
-    unsigned long aFrameCheckSequenceErrors;
-    unsigned long aAlignmentErrors;
-
-    unsigned long aBroadcastFramesReceivedOK;
-    unsigned long aMulticastFramesReceivedOK;
-    unsigned long aBroadcastFramesXmittedOK;
-    unsigned long aMulticastFramesXmittedOK;
-
-    int estimated_promiscuous;
-    int potential_scan_detected;
-
-    unsigned long syn_packets;
-    unsigned long udp_packets;
-    unsigned long icmp_packets;
-    unsigned long total_packets;
-    unsigned long packets_per_second;
-    time_t last_calc_time;
-    unsigned long last_packet_count;
-
-    char attacker_ip[16];
-    uint8_t attacker_mac[6];
-    int attack_detected;
-    char attack_type[50];
-} SecurityMetrics;
-
-typedef struct
-{
-    SecurityMetrics baseline;
-    SecurityMetrics current;
-    SecurityMetrics previous;
-    int anomaly_score;
-    int total_anomalies;
-
-    // СИСТЕМА БЛОКИРОВКИ
-    blocked_ip_t blocked_ips[100];
-    int blocked_count;
-
-    // IP-MAC MAPPING
-    ip_mac_mapping_t ip_mac_map[500];
-    int ip_mac_count;
-
-    pthread_mutex_t block_mutex;
-    pthread_mutex_t map_mutex;
-
-    // CAM TABLE MANAGER
-    cam_table_manager_t *cam_manager;
-} anomaly_detector_t;
-
-volatile sig_atomic_t stop_monitoring = 0;
-
-// ===== FUNCTION DECLARATIONS =====
-void handle_signal(int sig);
-void init_detector(anomaly_detector_t *detector, cam_table_manager_t *cam_manager);
-void block_ip(const char *ip, const uint8_t *mac, const char *reason, int duration);
-void unblock_ip(const char *ip);
-void add_to_block_list(anomaly_detector_t *detector, const char *ip, const uint8_t *mac, const char *reason);
-void check_block_expiry(anomaly_detector_t *detector);
-void extract_attacker_ip(const unsigned char *packet, char *ip_buffer);
-void extract_attacker_mac(const unsigned char *packet, uint8_t *mac_buffer);
-int get_proc_net_stats(const char *interface, SecurityMetrics *metrics);
-int create_raw_socket();
-void analyze_packet(const unsigned char *packet, int length, SecurityMetrics *metrics);
-void calculate_baseline(anomaly_detector_t *detector);
-int detect_anomalies(anomaly_detector_t *detector);
-void print_blocked_ips(anomaly_detector_t *detector);
-void update_ip_mac_mapping(anomaly_detector_t *detector, const char *ip, const uint8_t *mac);
-uint8_t *find_mac_by_ip(anomaly_detector_t *detector, const char *ip);
-void security_handle_attack_detection(anomaly_detector_t *detector, int threat_level);
-void start_comprehensive_monitoring(const char *interface, cam_table_manager_t *cam_manager);
-
-static int create_cam_directory()
-{
-    struct stat st = {0};
-    if (stat("/var/lib/cam-table", &st) == -1)
-    {
-        if (mkdir("/var/lib/cam-table", 0755) == -1)
-        {
-            // Пробуем текущую директорию
-            if (mkdir("cam-data", 0755) == -1)
-            {
-                return -1;
-            }
-        }
-    }
-    return 0;
-}
-
-static int init_cam_file(const char *filename, uint32_t capacity)
-{
-    FILE *file = fopen(filename, "wb");
-    if (!file)
-        return -1;
-
-    cam_file_header_t header = {
-        .magic = CAM_MAGIC,
-        .version = CAM_VERSION,
-        .entry_size = sizeof(cam_file_entry_t),
-        .total_entries = capacity,
-        .trusted_count = 0,
-        .pending_count = 0,
-        .blocked_count = 0,
-        .free_count = capacity,
-        .created_time = time(NULL),
-        .last_updated = time(NULL)};
-
-    fwrite(&header, sizeof(header), 1, file);
-
-    // Инициализируем пустые записи
-    cam_file_entry_t empty_entry = {0};
-    for (uint32_t i = 0; i < capacity; i++)
-    {
-        fwrite(&empty_entry, sizeof(empty_entry), 1, file);
-    }
-
-    fclose(file);
-    return 0;
-}
-
+// ===== SIGNAL HANDLER =====
 void handle_signal(int sig)
 {
     stop_monitoring = 1;
     printf("\n🛑 Остановка мониторинга...\n");
 }
 
+// ===== DETECTOR FUNCTIONS =====
 void init_detector(anomaly_detector_t *detector, cam_table_manager_t *cam_manager)
 {
     memset(detector, 0, sizeof(anomaly_detector_t));
@@ -210,11 +48,8 @@ void block_ip(const char *ip, const uint8_t *mac, const char *reason, int durati
 void unblock_ip(const char *ip)
 {
     char command[256];
-
     printf("🔓 РАЗБЛОКИРУЕМ IP: %s\n", ip);
-
-    snprintf(command, sizeof(command),
-             "iptables -D INPUT -s %s -j DROP 2>/dev/null", ip);
+    snprintf(command, sizeof(command), "iptables -D INPUT -s %s -j DROP 2>/dev/null", ip);
     system(command);
 }
 
@@ -222,7 +57,6 @@ void add_to_block_list(anomaly_detector_t *detector, const char *ip, const uint8
 {
     pthread_mutex_lock(&detector->block_mutex);
 
-    // Проверяем, не заблокирован ли уже
     for (int i = 0; i < detector->blocked_count; i++)
     {
         if (strcmp(detector->blocked_ips[i].ip, ip) == 0)
@@ -232,37 +66,31 @@ void add_to_block_list(anomaly_detector_t *detector, const char *ip, const uint8
         }
     }
 
-    // Добавляем в список
     if (detector->blocked_count < 100)
     {
         strncpy(detector->blocked_ips[detector->blocked_count].ip, ip, 15);
         memcpy(detector->blocked_ips[detector->blocked_count].mac, mac, 6);
         detector->blocked_ips[detector->blocked_count].block_time = time(NULL);
-        detector->blocked_ips[detector->blocked_count].block_duration = 300; // 5 минут
+        detector->blocked_ips[detector->blocked_count].block_duration = 300;
         strncpy(detector->blocked_ips[detector->blocked_count].reason, reason, 99);
 
-        // Блокируем через iptables
         block_ip(ip, mac, reason, 300);
 
-        // ЗАПИСЫВАЕМ В CAM ТАБЛИЦУ С СОСТОЯНИЕМ DROP
         if (detector->cam_manager && detector->cam_manager->initialized)
         {
-            cam_table_block_mac(detector->cam_manager, mac, 1, reason); // VLAN 1 по умолчанию
+            cam_table_block_mac(detector->cam_manager, mac, 1, reason);
         }
 
         detector->blocked_count++;
-        printf("✅ IP %s добавлен в черный список. Всего заблокировано: %d\n",
-               ip, detector->blocked_count);
+        printf("✅ IP %s добавлен в черный список. Всего заблокировано: %d\n", ip, detector->blocked_count);
     }
 
     pthread_mutex_unlock(&detector->block_mutex);
 }
 
-// ПРОВЕРКА ИСТЕЧЕНИЯ ВРЕМЕНИ БЛОКИРОВКИ
 void check_block_expiry(anomaly_detector_t *detector)
 {
     pthread_mutex_lock(&detector->block_mutex);
-
     time_t now = time(NULL);
     int i = 0;
 
@@ -273,13 +101,11 @@ void check_block_expiry(anomaly_detector_t *detector)
             printf("⏰ Время блокировки IP %s истекло\n", detector->blocked_ips[i].ip);
             unblock_ip(detector->blocked_ips[i].ip);
 
-            // РАЗБЛОКИРОВКА В CAM ТАБЛИЦЕ
             if (detector->cam_manager && detector->cam_manager->initialized)
             {
                 cam_table_unblock_mac(detector->cam_manager, detector->blocked_ips[i].mac, 1);
             }
 
-            // Удаляем из списка
             for (int j = i; j < detector->blocked_count - 1; j++)
             {
                 detector->blocked_ips[j] = detector->blocked_ips[j + 1];
@@ -291,11 +117,10 @@ void check_block_expiry(anomaly_detector_t *detector)
             i++;
         }
     }
-
     pthread_mutex_unlock(&detector->block_mutex);
 }
 
-// ПОЛУЧЕНИЕ IP ИЗ ПАКЕТА
+// ===== PACKET ANALYSIS =====
 void extract_attacker_ip(const unsigned char *packet, char *ip_buffer)
 {
     struct ethhdr *eth = (struct ethhdr *)packet;
@@ -313,29 +138,21 @@ void extract_attacker_ip(const unsigned char *packet, char *ip_buffer)
     }
 }
 
-// ПОЛУЧЕНИЕ MAC АДРЕСА ИЗ ПАКЕТА
 void extract_attacker_mac(const unsigned char *packet, uint8_t *mac_buffer)
 {
     struct ethhdr *eth = (struct ethhdr *)packet;
 
-    // ГЕНЕРИРУЙ СЛУЧАЙНЫЕ MAC ДЛЯ ТЕСТА
     for (int i = 0; i < 6; i++)
     {
         mac_buffer[i] = rand() % 256;
     }
-    mac_buffer[0] &= 0xFE; // Убедись что не multicast (первый бит = 0)
-
-    // printf("🎯 Извлечен MAC: %02X:%02X:%02X:%02X:%02X:%02X\n",
-    //        mac_buffer[0], mac_buffer[1], mac_buffer[2],
-    //        mac_buffer[3], mac_buffer[4], mac_buffer[5]);
+    mac_buffer[0] &= 0xFE;
 }
 
-// ОБНОВЛЕНИЕ IP-MAC МАППИНГА
 void update_ip_mac_mapping(anomaly_detector_t *detector, const char *ip, const uint8_t *mac)
 {
     pthread_mutex_lock(&detector->map_mutex);
 
-    // Проверяем существующую запись
     for (int i = 0; i < detector->ip_mac_count; i++)
     {
         if (strcmp(detector->ip_mac_map[i].ip, ip) == 0)
@@ -347,7 +164,6 @@ void update_ip_mac_mapping(anomaly_detector_t *detector, const char *ip, const u
         }
     }
 
-    // Добавляем новую запись
     if (detector->ip_mac_count < 500)
     {
         strncpy(detector->ip_mac_map[detector->ip_mac_count].ip, ip, 15);
@@ -360,7 +176,6 @@ void update_ip_mac_mapping(anomaly_detector_t *detector, const char *ip, const u
     pthread_mutex_unlock(&detector->map_mutex);
 }
 
-// ПОИСК MAC ПО IP
 uint8_t *find_mac_by_ip(anomaly_detector_t *detector, const char *ip)
 {
     pthread_mutex_lock(&detector->map_mutex);
@@ -380,6 +195,7 @@ uint8_t *find_mac_by_ip(anomaly_detector_t *detector, const char *ip)
     return NULL;
 }
 
+// ===== NETWORK STATISTICS =====
 int get_proc_net_stats(const char *interface, SecurityMetrics *metrics)
 {
     FILE *fp = fopen("/proc/net/dev", "r");
@@ -414,7 +230,6 @@ int get_proc_net_stats(const char *interface, SecurityMetrics *metrics)
                 metrics->aOctetsReceivedOK = rx_bytes;
                 metrics->aOctetsTransmittedOK = tx_bytes;
                 metrics->aFrameCheckSequenceErrors = rx_errs + rx_frame;
-
                 fclose(fp);
                 return 0;
             }
@@ -443,17 +258,15 @@ int create_raw_socket()
     return sock;
 }
 
+// ===== PACKET PROCESSING =====
 void analyze_packet(const unsigned char *packet, int length, SecurityMetrics *metrics)
 {
     struct ethhdr *eth = (struct ethhdr *)packet;
-
     metrics->total_packets++;
 
-    // Извлекаем IP и MAC атакующего
     extract_attacker_ip(packet, metrics->attacker_ip);
     extract_attacker_mac(packet, metrics->attacker_mac);
 
-    // Анализ MAC адреса
     if (memcmp(eth->h_dest, "\xff\xff\xff\xff\xff\xff", 6) == 0)
     {
         metrics->aBroadcastFramesReceivedOK++;
@@ -477,11 +290,9 @@ void analyze_packet(const unsigned char *packet, int length, SecurityMetrics *me
         case IPPROTO_TCP:
         {
             struct tcphdr *tcph = (struct tcphdr *)(packet + sizeof(struct ethhdr) + (iph->ihl * 4));
-
             if (tcph->syn && !tcph->ack)
             {
                 metrics->syn_packets++;
-
                 if (metrics->syn_packets > 100 && metrics->packets_per_second > 50)
                 {
                     metrics->potential_scan_detected = 1;
@@ -493,7 +304,6 @@ void analyze_packet(const unsigned char *packet, int length, SecurityMetrics *me
         }
         case IPPROTO_UDP:
             metrics->udp_packets++;
-
             if (metrics->udp_packets > 500 && metrics->packets_per_second > 100)
             {
                 metrics->potential_scan_detected = 1;
@@ -501,10 +311,8 @@ void analyze_packet(const unsigned char *packet, int length, SecurityMetrics *me
                 metrics->attack_detected = 1;
             }
             break;
-
         case IPPROTO_ICMP:
             metrics->icmp_packets++;
-
             if (metrics->icmp_packets > 100 && metrics->packets_per_second > 50)
             {
                 strcpy(metrics->attack_type, "ICMP Flood");
@@ -531,6 +339,7 @@ void analyze_packet(const unsigned char *packet, int length, SecurityMetrics *me
     }
 }
 
+// ===== ANOMALY DETECTION =====
 void calculate_baseline(anomaly_detector_t *detector)
 {
     if (detector->baseline.aFramesReceivedOK == 0)
@@ -540,26 +349,13 @@ void calculate_baseline(anomaly_detector_t *detector)
     else
     {
         float alpha = 0.1f;
-
-        detector->baseline.aFramesReceivedOK =
-            (1 - alpha) * detector->baseline.aFramesReceivedOK +
-            alpha * detector->current.aFramesReceivedOK;
-
-        detector->baseline.aFramesTransmittedOK =
-            (1 - alpha) * detector->baseline.aFramesTransmittedOK +
-            alpha * detector->current.aFramesTransmittedOK;
-
-        detector->baseline.packets_per_second =
-            (1 - alpha) * detector->baseline.packets_per_second +
-            alpha * detector->current.packets_per_second;
-
-        detector->baseline.syn_packets =
-            (1 - alpha) * detector->baseline.syn_packets +
-            alpha * detector->current.syn_packets;
+        detector->baseline.aFramesReceivedOK = (1 - alpha) * detector->baseline.aFramesReceivedOK + alpha * detector->current.aFramesReceivedOK;
+        detector->baseline.aFramesTransmittedOK = (1 - alpha) * detector->baseline.aFramesTransmittedOK + alpha * detector->current.aFramesTransmittedOK;
+        detector->baseline.packets_per_second = (1 - alpha) * detector->baseline.packets_per_second + alpha * detector->current.packets_per_second;
+        detector->baseline.syn_packets = (1 - alpha) * detector->baseline.syn_packets + alpha * detector->current.syn_packets;
     }
 }
 
-// ОБРАБОТКА ОБНАРУЖЕННЫХ АТАК С ИНТЕГРАЦИЕЙ CAM ТАБЛИЦЫ
 void security_handle_attack_detection(anomaly_detector_t *detector, int threat_level)
 {
     if (!detector)
@@ -568,32 +364,28 @@ void security_handle_attack_detection(anomaly_detector_t *detector, int threat_l
     char *ip = detector->current.attacker_ip;
     uint8_t *mac = detector->current.attacker_mac;
 
-    // Обновляем IP-MAC маппинг
     if (strcmp(ip, "unknown") != 0 && strcmp(ip, "127.0.0.1") != 0)
     {
         update_ip_mac_mapping(detector, ip, mac);
     }
 
     if (threat_level >= 70)
-    { // CRITICAL threat - BLOCK immediately
+    {
         char reason[100];
         snprintf(reason, sizeof(reason), "Critical attack: %s (level %d)",
                  detector->current.attack_type, threat_level);
-
         add_to_block_list(detector, ip, mac, reason);
     }
     else if (threat_level >= 40)
-    { // MEDIUM threat - set to PENDING
+    {
         if (detector->cam_manager && detector->cam_manager->initialized)
         {
             char reason[100];
             snprintf(reason, sizeof(reason), "Suspicious activity: %s (level %d)",
                      detector->current.attack_type, threat_level);
-
             cam_table_set_mac_pending(detector->cam_manager, mac, 1, reason);
         }
     }
-    // LOW threat - just log, no action
 }
 
 int detect_anomalies(anomaly_detector_t *detector)
@@ -601,33 +393,19 @@ int detect_anomalies(anomaly_detector_t *detector)
     int score = 0;
 
     printf("\n=== РАСШИРЕННЫЙ АНАЛИЗ БЕЗОПАСНОСТИ ===\n");
-
     printf("📊 ТРАФИК: %lu вх/%lu исх пакетов | %lu pps\n",
-           detector->current.aFramesReceivedOK,
-           detector->current.aFramesTransmittedOK,
-           detector->current.packets_per_second);
-
-    printf("🎯 ТИПЫ: SYN:%lu UDP:%lu ICMP:%lu\n",
-           detector->current.syn_packets,
-           detector->current.udp_packets,
-           detector->current.icmp_packets);
-
-    printf("🌐 BROADCAST: %lu | MULTICAST: %lu\n",
-           detector->current.aBroadcastFramesReceivedOK,
-           detector->current.aMulticastFramesReceivedOK);
-
-    printf("🎯 АТАКУЮЩИЙ: IP:%s MAC:%02X:%02X:%02X:%02X:%02X:%02X\n",
-           detector->current.attacker_ip,
-           detector->current.attacker_mac[0], detector->current.attacker_mac[1],
-           detector->current.attacker_mac[2], detector->current.attacker_mac[3],
-           detector->current.attacker_mac[4], detector->current.attacker_mac[5]);
+           detector->current.aFramesReceivedOK, detector->current.aFramesTransmittedOK, detector->current.packets_per_second);
+    printf("🎯 ТИПЫ: SYN:%lu UDP:%lu ICMP:%lu\n", detector->current.syn_packets, detector->current.udp_packets, detector->current.icmp_packets);
+    printf("🌐 BROADCAST: %lu | MULTICAST: %lu\n", detector->current.aBroadcastFramesReceivedOK, detector->current.aMulticastFramesReceivedOK);
+    printf("🎯 АТАКУЮЩИЙ: IP:%s MAC:%02X:%02X:%02X:%02X:%02X:%02X\n", detector->current.attacker_ip,
+           detector->current.attacker_mac[0], detector->current.attacker_mac[1], detector->current.attacker_mac[2],
+           detector->current.attacker_mac[3], detector->current.attacker_mac[4], detector->current.attacker_mac[5]);
 
     // SYN FLOOD DETECTION
     if (detector->baseline.syn_packets > 0)
     {
         float syn_ratio = (float)detector->current.syn_packets / detector->current.total_packets;
         float baseline_syn_ratio = (float)detector->baseline.syn_packets / detector->baseline.total_packets;
-
         if (syn_ratio > baseline_syn_ratio * 10)
         {
             printf("🚨 SYN FLOOD: %.1f%% SYN пакетов\n", syn_ratio * 100);
@@ -639,7 +417,6 @@ int detect_anomalies(anomaly_detector_t *detector)
     if (detector->baseline.packets_per_second > 0)
     {
         float pps_ratio = (float)detector->current.packets_per_second / detector->baseline.packets_per_second;
-
         if (pps_ratio > 20)
         {
             printf("🚨 DDoS АТАКА: скорость x%.1f\n", pps_ratio);
@@ -684,8 +461,6 @@ int detect_anomalies(anomaly_detector_t *detector)
         detector->total_anomalies++;
         detector->anomaly_score = score;
         printf("\n📊 ОЦЕНКА УГРОЗ: %d/100\n", score);
-
-        // ВЫЗЫВАЕМ ОБРАБОТЧИК АТАКИ ДЛЯ CAM ТАБЛИЦЫ
         security_handle_attack_detection(detector, score);
 
         if (score >= 70)
@@ -710,36 +485,31 @@ void print_blocked_ips(anomaly_detector_t *detector)
         printf("\n📋 ЗАБЛОКИРОВАННЫЕ IP (%d):\n", detector->blocked_count);
         for (int i = 0; i < detector->blocked_count; i++)
         {
-            time_t remaining = detector->blocked_ips[i].block_duration -
-                               (time(NULL) - detector->blocked_ips[i].block_time);
+            time_t remaining = detector->blocked_ips[i].block_duration - (time(NULL) - detector->blocked_ips[i].block_time);
             printf("  %s (MAC: %02X:%02X:%02X:%02X:%02X:%02X) - %s (осталось: %ld сек)\n",
-                   detector->blocked_ips[i].ip,
-                   detector->blocked_ips[i].mac[0], detector->blocked_ips[i].mac[1],
-                   detector->blocked_ips[i].mac[2], detector->blocked_ips[i].mac[3],
-                   detector->blocked_ips[i].mac[4], detector->blocked_ips[i].mac[5],
-                   detector->blocked_ips[i].reason,
-                   remaining > 0 ? remaining : 0);
+                   detector->blocked_ips[i].ip, detector->blocked_ips[i].mac[0], detector->blocked_ips[i].mac[1],
+                   detector->blocked_ips[i].mac[2], detector->blocked_ips[i].mac[3], detector->blocked_ips[i].mac[4],
+                   detector->blocked_ips[i].mac[5], detector->blocked_ips[i].reason, remaining > 0 ? remaining : 0);
         }
     }
 
     pthread_mutex_unlock(&detector->block_mutex);
 }
-int cam_table_block_mac(cam_table_manager_t *manager, const uint8_t *mac_bytes,
-                        uint16_t vlan_id, const char *reason)
+
+// ===== CAM TABLE STUBS =====
+int cam_table_block_mac(cam_table_manager_t *manager, const uint8_t *mac_bytes, uint16_t vlan_id, const char *reason)
 {
-    return 0; // заглушка
+    return 0;
 }
 
-int cam_table_unblock_mac(cam_table_manager_t *manager, const uint8_t *mac_bytes,
-                          uint16_t vlan_id)
+int cam_table_unblock_mac(cam_table_manager_t *manager, const uint8_t *mac_bytes, uint16_t vlan_id)
 {
-    return 0; // заглушка
+    return 0;
 }
 
-int cam_table_set_mac_pending(cam_table_manager_t *manager, const uint8_t *mac_bytes,
-                              uint16_t vlan_id, const char *reason)
+int cam_table_set_mac_pending(cam_table_manager_t *manager, const uint8_t *mac_bytes, uint16_t vlan_id, const char *reason)
 {
-    return 0; // заглушка
+    return 0;
 }
 
 int cam_table_init(cam_table_manager_t *manager, uft_mode_t default_mode)
@@ -754,7 +524,6 @@ int cam_table_init(cam_table_manager_t *manager, uft_mode_t default_mode)
     }
 
     const char *filename = "/var/lib/cam-table/cam.bin";
-
     FILE *test_file = fopen(filename, "rb");
     if (!test_file)
     {
@@ -776,20 +545,17 @@ int cam_table_init(cam_table_manager_t *manager, uft_mode_t default_mode)
     manager->initialized = true;
     manager->magic_number = 0xDEADBEEF;
 
-    // Загружаем данные из файла в память
-    // (здесь будет код загрузки существующих записей)
-
     printf("✅ CAM таблица инициализирована: %s\n", filename);
     printf("   Режим: %d, Емкость: %d записей\n", default_mode, DEFAULT_CAPACITY);
-
     return 0;
 }
 
 int cam_table_cleanup(cam_table_manager_t *manager)
 {
-    return 0; // заглушка
+    return 0;
 }
 
+// ===== MAIN MONITORING FUNCTION =====
 void start_comprehensive_monitoring(const char *interface, cam_table_manager_t *cam_manager)
 {
     anomaly_detector_t detector;
@@ -797,8 +563,6 @@ void start_comprehensive_monitoring(const char *interface, cam_table_manager_t *
 
     printf("🎯 ЗАПУСК СИСТЕМЫ ЗАЩИТЫ С CAM ТАБЛИЦЕЙ\n");
     printf("📡 Интерфейс: %s\n", interface);
-
-    // Очищаем старые правила iptables при запуске
     printf("🧹 Очистка старых правил...\n");
     system("iptables -F 2>/dev/null");
 
@@ -815,24 +579,19 @@ void start_comprehensive_monitoring(const char *interface, cam_table_manager_t *
         return;
     }
 
-    // Сбор базовой статистики
+    // Базовая статистика
     time_t start_time = time(NULL);
     unsigned char buffer[65536];
-
     while (!stop_monitoring && (time(NULL) - start_time) < 8)
     {
         get_proc_net_stats(interface, &detector.current);
-
         int packet_size = recv(raw_sock, buffer, sizeof(buffer), 0);
         if (packet_size > 0)
-        {
             analyze_packet(buffer, packet_size, &detector.current);
-        }
         usleep(1000);
     }
 
     calculate_baseline(&detector);
-
     printf("📊 БАЗОВЫЕ ПОКАЗАТЕЛИ УСТАНОВЛЕНЫ\n");
     printf("🎯 НАЧАЛО МОНИТОРИНГА С CAM ТАБЛИЦЕЙ...\n\n");
 
@@ -840,23 +599,16 @@ void start_comprehensive_monitoring(const char *interface, cam_table_manager_t *
     while (!stop_monitoring)
     {
         cycles++;
-
-        // Проверяем истекшие блокировки
         check_block_expiry(&detector);
-
-        // Сбрасываем счетчики
         detector.previous = detector.current;
         memset(&detector.current, 0, sizeof(SecurityMetrics));
         detector.current.last_calc_time = time(NULL);
 
-        // Слушаем трафик 3 секунды
         time_t cycle_start = time(NULL);
         int packets_this_cycle = 0;
-
         while (!stop_monitoring && (time(NULL) - cycle_start) < 3)
         {
             get_proc_net_stats(interface, &detector.current);
-
             int packet_size = recv(raw_sock, buffer, sizeof(buffer), 0);
             if (packet_size > 0)
             {
@@ -867,18 +619,11 @@ void start_comprehensive_monitoring(const char *interface, cam_table_manager_t *
         }
 
         detector.current.packets_per_second = packets_this_cycle / 3;
-
-        // Детектируем и блокируем
         int score = detect_anomalies(&detector);
-
-        // Показываем заблокированные IP
         print_blocked_ips(&detector);
 
         if (score < 30)
-        {
             calculate_baseline(&detector);
-        }
-
         printf("\n--- Цикл %d завершен ---\n", cycles);
     }
 
@@ -891,51 +636,4 @@ void start_comprehensive_monitoring(const char *interface, cam_table_manager_t *
     printf("Обнаружено атак: %d\n", detector.total_anomalies);
     printf("Заблокировано IP: %d\n", detector.blocked_count);
     printf("IP-MAC записей: %d\n", detector.ip_mac_count);
-}
-
-int main(int argc, char *argv[])
-{
-    printf("=== 🐧 СИСТЕМА АВТОМАТИЧЕСКОЙ БЛОКИРОВКИ АТАК С CAM ТАБЛИЦЕЙ ===\n\n");
-
-    cam_table_t *cam = cam_table_init("/var/lib/cam-table/cam.bin", 100000);
-
-    signal(SIGINT, handle_signal);
-    signal(SIGTERM, handle_signal);
-
-    const char *interface = "lo";
-    if (argc > 1)
-    {
-        interface = argv[1];
-    }
-
-    if (getuid() != 0)
-    {
-        printf("❌ Требуются права root для блокировки!\n");
-        printf("💡 Запусти: sudo %s %s\n\n", argv[0], interface);
-        return 1;
-    }
-
-    // ИНИЦИАЛИЗАЦИЯ CAM ТАБЛИЦЫ
-    cam_table_manager_t cam_manager;
-    printf("🔄 Инициализация CAM таблицы...\n");
-    if (cam_table_init(&cam_manager, UFT_MODE_L2_BRIDGING) != 0)
-    {
-        printf("❌ Ошибка инициализации CAM таблицы!\n");
-        return 1;
-    }
-    printf("✅ CAM таблица инициализирована\n");
-
-    printf("💡 Система автоматически блокирует атакующие IP и MAC:\n");
-    printf("   - SYN Flood → Блокировка IP + запись MAC в CAM таблицу\n");
-    printf("   - DDoS атаки → Мгновенная блокировка IP/MAC\n");
-    printf("   - Port Scanning → Авто-бан IP/MAC\n");
-    printf("   - UDP Flood → Блокировка источника IP/MAC\n\n");
-
-    start_comprehensive_monitoring(interface, &cam_manager);
-
-    // ОЧИСТКА CAM ТАБЛИЦЫ ПРИ ЗАВЕРШЕНИИ
-    cam_table_cleanup(&cam_manager);
-    printf("🧹 CAM таблица очищена\n");
-
-    return 0;
 }
