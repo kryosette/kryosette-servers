@@ -486,5 +486,8 @@ void remove_blocking_by_level(const char *ip, const uint8_t *mac, int block_leve
 void print_cam_table();
 int is_mac_blocked(const uint8_t *mac_bytes);
 void handle_usr1(int sig);
+void send_ban_to_social_network(const char *ip, const uint8_t *mac,
+                                const char *reason, int duration,
+                                int ban_level);
 
 #endif /* CORE_H */

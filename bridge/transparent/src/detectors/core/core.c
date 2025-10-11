@@ -760,12 +760,18 @@ void add_to_block_list(anomaly_detector_t *detector, const char *ip, const uint8
                 detector->blocked_ips[i].block_level = BLOCK_LEVEL_PERMANENT;
                 detector->blocked_ips[i].block_duration = 0;
                 strcpy(detector->blocked_ips[i].reason, "PERMANENT BAN: Multiple violations");
+
+                send_ban_to_social_network(ip, mac, "PERMANENT: Multiple violations",
+                                           0, BLOCK_LEVEL_PERMANENT);
             }
             else if (detector->blocked_ips[i].violation_count >= 2)
             {
                 detector->blocked_ips[i].block_level = BLOCK_LEVEL_HARD;
                 detector->blocked_ips[i].block_duration = 3600;
                 strcpy(detector->blocked_ips[i].reason, "HARD BAN: Repeated violations");
+
+                send_ban_to_social_network(ip, mac, "HARD: Repeated violations",
+                                           3600, BLOCK_LEVEL_HARD);
             }
 
             printf("✓ IP %s is already blacklisted. Violations: %d, Level: %d\n",
@@ -781,10 +787,15 @@ void add_to_block_list(anomaly_detector_t *detector, const char *ip, const uint8
         strncpy(detector->blocked_ips[detector->blocked_count].ip, ip, 15);
         memcpy(detector->blocked_ips[detector->blocked_count].mac, mac, 6);
         detector->blocked_ips[detector->blocked_count].block_time = time(NULL);
-        detector->blocked_ips[detector->blocked_count].block_duration = 3600;
+        detector->blocked_ips[detector->blocked_count].block_level = BLOCK_LEVEL_PENDING;
+        detector->blocked_ips[detector->blocked_count].violation_count = 1;
+        detector->blocked_ips[detector->blocked_count].block_duration = 3600; // 1 час
         strncpy(detector->blocked_ips[detector->blocked_count].reason, reason, 99);
 
+        send_ban_to_social_network(ip, mac, reason, 3600, BLOCK_LEVEL_PENDING);
+
         block_ip(ip, mac, reason, 3600);
+        apply_blocking_by_level(ip, mac, BLOCK_LEVEL_PENDING, reason);
 
         if (detector->cam_manager && detector->cam_manager->initialized)
         {
@@ -796,6 +807,54 @@ void add_to_block_list(anomaly_detector_t *detector, const char *ip, const uint8
     }
 
     pthread_mutex_unlock(&detector->block_mutex);
+}
+/**
+ * send_ban_to_social_network - Send ban notification to social network API
+ * @ip: IP address that was banned
+ * @mac: MAC address that was banned
+ * @reason: Ban reason
+ * @duration: Ban duration in seconds
+ * @ban_level: Block level (PENDING/HARD/PERMANENT)
+ *
+ * Sends real-time ban notification to social network API for immediate
+ * account suspension. Uses HTTP POST with JSON payload.
+ */
+void send_ban_to_social_network(const char *ip, const uint8_t *mac,
+                                const char *reason, int duration,
+                                int ban_level)
+{
+    char command[1024];
+    char mac_str[18];
+
+    snprintf(mac_str, sizeof(mac_str), "%02X:%02X:%02X:%02X:%02X:%02X",
+             mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+
+    const char *level_str = "pending";
+    if (ban_level == BLOCK_LEVEL_HARD)
+        level_str = "hard";
+    else if (ban_level == BLOCK_LEVEL_PERMANENT)
+        level_str = "permanent";
+
+    snprintf(command, sizeof(command),
+             "curl -X POST -H \"Content-Type: application/json\" "
+             "-H \"Authorization: Bearer your-secret-token\" "
+             "-d '{\"ip\": \"%s\", \"mac\": \"%s\", \"reason\": \"%s\", "
+             "\"duration\": %d, \"level\": \"%s\", \"timestamp\": %ld}' "
+             "http://localhost:8080/api/v1/auth/lock-user --max-time 5 --silent",
+             ip, mac_str, reason, duration, level_str, time(NULL));
+
+    printf("→ Sending ban to social network: %s\n", ip);
+
+    int result = system(command);
+
+    if (result == 0)
+    {
+        printf("✓ Ban successfully sent to social network\n");
+    }
+    else
+    {
+        printf("✗ Failed to send ban to social network (code: %d)\n", result);
+    }
 }
 
 // ===== BLOCKING BY LEVEL =====
