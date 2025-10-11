@@ -1,10 +1,430 @@
-#include "core.h"
+#include "/mnt/c/Users/dmako/kryosette/kryosette-servers/bridge/transparent/src/detectors/core/include/core.h"
+
+// ===== GLOBAL VARIABLES =====
+volatile sig_atomic_t stop_monitoring = 0;
+
+// ===== CAM TABLE UTILITIES =====
+static int create_cam_directory()
+{
+    struct stat st = {0};
+    static const char *primary_path = "/mnt/c/Users/dmako/kryosette/kryosette-servers/bridge/var/lib/cam-table";
+    static const char *fallback_path = "/tmp/cam-table";
+
+    if (stat(primary_path, &st) == 0)
+    {
+        if (S_ISDIR(st.st_mode))
+            return 0;
+        else
+        {
+            fprintf(stderr, "Error: %s exists but is not a directory\n", primary_path);
+            return -1;
+        }
+    }
+
+    if (mkdir(primary_path, 0700) == 0)
+        return 0;
+
+    if (errno != EACCES)
+        fprintf(stderr, "mkdir(%s) failed: %s\n", primary_path, strerror(errno));
+
+    if (stat(fallback_path, &st) == 0)
+    {
+        if (S_ISDIR(st.st_mode))
+        {
+            printf("Using existing fallback: %s\n", fallback_path);
+            return 0;
+        }
+        else
+        {
+            fprintf(stderr, "Error: %s exists but is not a directory\n", fallback_path);
+            return -1;
+        }
+    }
+
+    if (mkdir(fallback_path, 0700) == 0)
+    {
+        printf("Created fallback directory: %s\n", fallback_path);
+        return 0;
+    }
+
+    fprintf(stderr, "Failed to create both directories\n");
+    return -1;
+}
+
+static int init_cam_file(const char *filename, uint32_t capacity)
+{
+    FILE *file = fopen(filename, "wb");
+    if (!file)
+        return -1;
+
+    cam_file_header_t header = {
+        .magic = CAM_MAGIC,
+        .version = CAM_VERSION,
+        .entry_size = sizeof(cam_file_entry_t),
+        .total_entries = capacity,
+        .trusted_count = 0,
+        .pending_count = 0,
+        .blocked_count = 0,
+        .free_count = capacity,
+        .created_time = time(NULL),
+        .last_updated = time(NULL)};
+
+    fwrite(&header, sizeof(header), 1, file);
+
+    cam_file_entry_t empty_entry = {0};
+    for (uint32_t i = 0; i < capacity; i++)
+    {
+        fwrite(&empty_entry, sizeof(empty_entry), 1, file);
+    }
+
+    fclose(file);
+    return 0;
+}
+
+// ===== CAM TABLE READER =====
+void print_cam_table()
+{
+    const char *filename = "/mnt/c/Users/dmako/kryosette/kryosette-servers/bridge/var/lib/cam-table/cam.bin";
+
+    printf("\n📖 ЧТЕНИЕ CAM ТАБЛИЦЫ: %s\n", filename);
+
+    FILE *file = fopen(filename, "rb");
+    if (!file)
+    {
+        printf("❌ Не удалось открыть CAM файл для чтения\n");
+        return;
+    }
+
+    cam_file_header_t header;
+    if (fread(&header, sizeof(header), 1, file) != 1)
+    {
+        printf("❌ Ошибка чтения заголовка\n");
+        fclose(file);
+        return;
+    }
+
+    printf("=== CAM TABLE HEADER ===\n");
+    printf("Магическое число: 0x%X\n", header.magic);
+    printf("Версия: %d\n", header.version);
+    printf("Всего записей: %d\n", header.total_entries);
+    printf("Заблокировано: %d\n", header.blocked_count);
+    printf("В ожидании: %d\n", header.pending_count);
+    printf("Доверенных: %d\n", header.trusted_count);
+    printf("Свободно: %d\n", header.free_count);
+    printf("Создана: %s", ctime(&header.created_time));
+    printf("Обновлена: %s", ctime(&header.last_updated));
+
+    printf("\n=== ЗАБЛОКИРОВАННЫЕ MAC АДРЕСА ===\n");
+
+    cam_file_entry_t entry;
+    int blocked_found = 0;
+
+    for (uint32_t i = 0; i < header.total_entries; i++)
+    {
+        if (fread(&entry, sizeof(entry), 1, file) != 1)
+        {
+            printf("❌ Ошибка чтения записи %d\n", i);
+            break;
+        }
+
+        if (entry.status == ENTRY_BLOCKED)
+        {
+            blocked_found++;
+            printf("\n🔒 Запись #%d:\n", i);
+            printf("   MAC: %02X:%02X:%02X:%02X:%02X:%02X\n",
+                   entry.mac[0], entry.mac[1], entry.mac[2],
+                   entry.mac[3], entry.mac[4], entry.mac[5]);
+            printf("   IP: %s\n", entry.ip_address);
+            printf("   VLAN: %d\n", entry.vlan_id);
+            printf("   Причина: %s\n", entry.reason);
+            printf("   Время блокировки: %s", ctime(&entry.block_time));
+            printf("   Длительность: %d сек\n", entry.block_duration);
+            printf("   Последний раз видели: %s", ctime(&entry.last_seen));
+        }
+    }
+
+    if (!blocked_found)
+    {
+        printf("❌ Заблокированных записей не найдено\n");
+    }
+    else
+    {
+        printf("\n✅ Найдено заблокированных записей: %d\n", blocked_found);
+    }
+
+    fclose(file);
+}
+
+// ===== CAM TABLE INIT & CLEANUP =====
+int cam_table_init(cam_table_manager_t *manager, uft_mode_t default_mode)
+{
+    if (!manager)
+        return -1;
+
+    if (create_cam_directory() != 0)
+    {
+        printf("❌ Не удалось создать директорию для CAM таблицы\n");
+        return -1;
+    }
+
+    const char *filename = "/mnt/c/Users/dmako/kryosette/kryosette-servers/bridge/var/lib/cam-table/cam.bin";
+    FILE *test_file = fopen(filename, "rb");
+    if (!test_file)
+    {
+        printf("🆕 Создаю новую CAM таблицу: %s\n", filename);
+        if (init_cam_file(filename, DEFAULT_CAPACITY) != 0)
+        {
+            printf("❌ Ошибка создания CAM файла\n");
+            return -1;
+        }
+    }
+    else
+    {
+        fclose(test_file);
+        printf("📂 Загружаю существующую CAM таблицу\n");
+
+        // Покажем что уже есть в таблице
+        print_cam_table();
+    }
+
+    // Инициализация менеджера
+    manager->current_mode = default_mode;
+    manager->initialized = true;
+
+    printf("✅ CAM таблица инициализирована: %s\n", filename);
+    printf("   Режим: %d, Емкость: %d записей\n", default_mode, DEFAULT_CAPACITY);
+    return 0;
+}
+
+int cam_table_cleanup(cam_table_manager_t *manager)
+{
+    if (!manager)
+        return -1;
+
+    // НЕ очищаем файл, только сбрасываем флаг
+    manager->initialized = false;
+    printf("✅ CAM менеджер остановлен (данные сохранены в файле)\n");
+    return 0;
+}
+
+// ===== CHECK IF MAC IS BLOCKED =====
+int is_mac_blocked(const uint8_t *mac_bytes)
+{
+    const char *filename = "/mnt/c/Users/dmako/kryosette/kryosette-servers/bridge/var/lib/cam-table/cam.bin";
+    FILE *file = fopen(filename, "rb");
+    if (!file)
+        return 0; // Если файла нет, значит MAC не заблокирован
+
+    cam_file_header_t header;
+    if (fread(&header, sizeof(header), 1, file) != 1)
+    {
+        fclose(file);
+        return 0;
+    }
+
+    cam_file_entry_t entry;
+    for (uint32_t i = 0; i < header.total_entries; i++)
+    {
+        if (fread(&entry, sizeof(entry), 1, file) != 1)
+            break;
+
+        if (entry.status == ENTRY_BLOCKED &&
+            memcmp(entry.mac, mac_bytes, 6) == 0)
+        {
+            fclose(file);
+            return 1; // MAC заблокирован
+        }
+    }
+
+    fclose(file);
+    return 0; // MAC не заблокирован
+}
+
+// ===== CAM TABLE FUNCTIONS =====
+int cam_table_block_mac(cam_table_manager_t *manager, const uint8_t *mac_bytes, uint16_t vlan_id, const char *reason)
+{
+    if (!manager || !manager->initialized)
+        return -1;
+
+    // Сначала проверим, не заблокирован ли уже этот MAC
+    if (is_mac_blocked(mac_bytes))
+    {
+        printf("⚠️ MAC уже заблокирован в CAM таблице: %02X:%02X:%02X:%02X:%02X:%02X\n",
+               mac_bytes[0], mac_bytes[1], mac_bytes[2],
+               mac_bytes[3], mac_bytes[4], mac_bytes[5]);
+        return 0;
+    }
+
+    const char *filename = "/mnt/c/Users/dmako/kryosette/kryosette-servers/bridge/var/lib/cam-table/cam.bin";
+    FILE *file = fopen(filename, "r+b");
+    if (!file)
+    {
+        printf("❌ Не удалось открыть CAM файл для блокировки\n");
+        return -1;
+    }
+
+    cam_file_header_t header;
+    fread(&header, sizeof(header), 1, file);
+
+    cam_file_entry_t entry;
+    int found = 0;
+
+    for (uint32_t i = 0; i < header.total_entries; i++)
+    {
+        fread(&entry, sizeof(entry), 1, file);
+
+        if (entry.status == ENTRY_FREE ||
+            (memcmp(entry.mac, mac_bytes, 6) == 0 && entry.vlan_id == vlan_id))
+        {
+            found = 1;
+
+            memcpy(entry.mac, mac_bytes, 6);
+            entry.vlan_id = vlan_id;
+            entry.status = ENTRY_BLOCKED;
+            entry.last_seen = time(NULL);
+            strncpy(entry.reason, reason, sizeof(entry.reason) - 1);
+
+            fseek(file, sizeof(header) + i * sizeof(entry), SEEK_SET);
+            fwrite(&entry, sizeof(entry), 1, file);
+
+            header.blocked_count++;
+            if (entry.status == ENTRY_FREE)
+                header.free_count--;
+
+            break;
+        }
+    }
+
+    if (found)
+    {
+        header.last_updated = time(NULL);
+        fseek(file, 0, SEEK_SET);
+        fwrite(&header, sizeof(header), 1, file);
+        printf("✅ MAC заблокирован в CAM таблице: %02X:%02X:%02X:%02X:%02X:%02X\n",
+               mac_bytes[0], mac_bytes[1], mac_bytes[2],
+               mac_bytes[3], mac_bytes[4], mac_bytes[5]);
+    }
+
+    fclose(file);
+    return found ? 0 : -1;
+}
+
+int cam_table_unblock_mac(cam_table_manager_t *manager, const uint8_t *mac_bytes, uint16_t vlan_id)
+{
+    if (!manager || !manager->initialized)
+        return -1;
+
+    const char *filename = "/mnt/c/Users/dmako/kryosette/kryosette-servers/bridge/var/lib/cam-table/cam.bin";
+    FILE *file = fopen(filename, "r+b");
+    if (!file)
+        return -1;
+
+    cam_file_header_t header;
+    fread(&header, sizeof(header), 1, file);
+
+    cam_file_entry_t entry;
+    int found = 0;
+
+    for (uint32_t i = 0; i < header.total_entries; i++)
+    {
+        fread(&entry, sizeof(entry), 1, file);
+
+        if (entry.status == ENTRY_BLOCKED &&
+            memcmp(entry.mac, mac_bytes, 6) == 0 &&
+            entry.vlan_id == vlan_id)
+        {
+            found = 1;
+            memset(&entry, 0, sizeof(entry));
+            entry.status = ENTRY_FREE;
+
+            fseek(file, sizeof(header) + i * sizeof(entry), SEEK_SET);
+            fwrite(&entry, sizeof(entry), 1, file);
+
+            header.blocked_count--;
+            header.free_count++;
+
+            break;
+        }
+    }
+
+    if (found)
+    {
+        header.last_updated = time(NULL);
+        fseek(file, 0, SEEK_SET);
+        fwrite(&header, sizeof(header), 1, file);
+        printf("✅ MAC разблокирован в CAM таблице: %02X:%02X:%02X:%02X:%02X:%02X\n",
+               mac_bytes[0], mac_bytes[1], mac_bytes[2],
+               mac_bytes[3], mac_bytes[4], mac_bytes[5]);
+    }
+
+    fclose(file);
+    return found ? 0 : -1;
+}
+
+int cam_table_set_mac_pending(cam_table_manager_t *manager, const uint8_t *mac_bytes, uint16_t vlan_id, const char *reason)
+{
+    if (!manager || !manager->initialized)
+        return -1;
+
+    const char *filename = "/mnt/c/Users/dmako/kryosette/kryosette-servers/bridge/var/lib/cam-table/cam.bin";
+    FILE *file = fopen(filename, "r+b");
+    if (!file)
+        return -1;
+
+    cam_file_header_t header;
+    fread(&header, sizeof(header), 1, file);
+
+    cam_file_entry_t entry;
+    int found = 0;
+
+    for (uint32_t i = 0; i < header.total_entries; i++)
+    {
+        fread(&entry, sizeof(entry), 1, file);
+
+        if (entry.status == ENTRY_FREE ||
+            (memcmp(entry.mac, mac_bytes, 6) == 0 && entry.vlan_id == vlan_id))
+        {
+            found = 1;
+
+            memcpy(entry.mac, mac_bytes, 6);
+            entry.vlan_id = vlan_id;
+            entry.status = ENTRY_PENDING;
+            entry.last_seen = time(NULL);
+            strncpy(entry.reason, reason, sizeof(entry.reason) - 1);
+
+            fseek(file, sizeof(header) + i * sizeof(entry), SEEK_SET);
+            fwrite(&entry, sizeof(entry), 1, file);
+
+            header.pending_count++;
+            if (entry.status == ENTRY_FREE)
+                header.free_count--;
+
+            break;
+        }
+    }
+
+    if (found)
+    {
+        header.last_updated = time(NULL);
+        fseek(file, 0, SEEK_SET);
+        fwrite(&header, sizeof(header), 1, file);
+    }
+
+    fclose(file);
+    return found ? 0 : -1;
+}
 
 // ===== SIGNAL HANDLER =====
 void handle_signal(int sig)
 {
     stop_monitoring = 1;
     printf("\n🛑 Остановка мониторинга...\n");
+}
+
+void handle_usr1(int sig)
+{
+    printf("\n📊 ПОКАЗАТЬ CAM ТАБЛИЦУ ПО ЗАПРОСУ\n");
+    print_cam_table();
 }
 
 // ===== DETECTOR FUNCTIONS =====
@@ -24,6 +444,126 @@ void block_ip(const char *ip, const uint8_t *mac, const char *reason, int durati
     printf("🔒 L2 БЛОКИРОВКА MAC: %02X:%02X:%02X:%02X:%02X:%02X | IP: %s | Причина: %s\n",
            mac[0], mac[1], mac[2], mac[3], mac[4], mac[5], ip, reason);
 
+    // Сначала проверим, не заблокирован ли уже этот MAC
+    if (is_mac_blocked(mac))
+    {
+        printf("⚠️ MAC уже заблокирован в CAM таблице, пропускаем запись\n");
+    }
+    else
+    {
+        const char *filename = "/mnt/c/Users/dmako/kryosette/kryosette-servers/bridge/var/lib/cam-table/cam.bin";
+
+        printf("🔄 Попытка записи в CAM таблицу: %s\n", filename);
+
+        FILE *file = fopen(filename, "r+b");
+        if (!file)
+        {
+            printf("❌ Не удалось открыть CAM файл, создаем новый...\n");
+
+            char dir_cmd[512];
+            snprintf(dir_cmd, sizeof(dir_cmd), "mkdir -p /mnt/c/Users/dmako/kryosette/kryosette-servers/bridge/var/lib/cam-table/");
+            system(dir_cmd);
+
+            file = fopen(filename, "w+b");
+            if (!file)
+            {
+                printf("❌ Ошибка создания CAM файла: %s\n", strerror(errno));
+                return;
+            }
+
+            printf("🆕 Инициализируем новый CAM файл...\n");
+            cam_file_header_t header = {
+                .magic = CAM_MAGIC,
+                .version = CAM_VERSION,
+                .entry_size = sizeof(cam_file_entry_t),
+                .total_entries = DEFAULT_CAPACITY,
+                .trusted_count = 0,
+                .pending_count = 0,
+                .blocked_count = 0,
+                .free_count = DEFAULT_CAPACITY,
+                .created_time = time(NULL),
+                .last_updated = time(NULL)};
+            fwrite(&header, sizeof(header), 1, file);
+
+            cam_file_entry_t empty_entry = {0};
+            for (uint32_t i = 0; i < DEFAULT_CAPACITY; i++)
+            {
+                fwrite(&empty_entry, sizeof(empty_entry), 1, file);
+            }
+            fseek(file, 0, SEEK_SET);
+            printf("✅ Новый CAM файл создан и инициализирован\n");
+        }
+
+        cam_file_header_t header;
+        size_t read_result = fread(&header, sizeof(header), 1, file);
+        printf("📖 Прочитано записей заголовка: %zu\n", read_result);
+
+        if (read_result != 1)
+        {
+            printf("❌ Ошибка чтения заголовка CAM файла\n");
+            fclose(file);
+            return;
+        }
+
+        cam_file_entry_t entry;
+        int found = 0;
+
+        for (uint32_t i = 0; i < header.total_entries; i++)
+        {
+            if (fread(&entry, sizeof(entry), 1, file) != 1)
+            {
+                printf("❌ Ошибка чтения записи %u\n", i);
+                break;
+            }
+
+            if (entry.status == ENTRY_FREE ||
+                (memcmp(entry.mac, mac, 6) == 0 && entry.vlan_id == 1))
+            {
+                found = 1;
+                printf("✅ Найдена запись для сохранения (индекс %u)\n", i);
+
+                memcpy(entry.mac, mac, 6);
+                entry.vlan_id = 1;
+                entry.status = ENTRY_BLOCKED;
+                entry.last_seen = time(NULL);
+                strncpy(entry.reason, reason, sizeof(entry.reason) - 1);
+                strncpy(entry.ip_address, ip, sizeof(entry.ip_address) - 1);
+                entry.block_duration = duration;
+                entry.block_time = time(NULL);
+
+                fseek(file, sizeof(header) + i * sizeof(entry), SEEK_SET);
+                size_t write_result = fwrite(&entry, sizeof(entry), 1, file);
+                printf("📝 Записано записей: %zu\n", write_result);
+
+                header.blocked_count++;
+                if (entry.status == ENTRY_FREE)
+                {
+                    header.free_count--;
+                }
+
+                break;
+            }
+        }
+
+        if (found)
+        {
+            header.last_updated = time(NULL);
+            fseek(file, 0, SEEK_SET);
+            fwrite(&header, sizeof(header), 1, file);
+            printf("✅ Блокировка сохранена в CAM таблицу!\n");
+            printf("📊 Статистика: заблокировано %d MAC, свободно %d записей\n",
+                   header.blocked_count, header.free_count);
+        }
+        else
+        {
+            printf("❌ Не найдено свободное место в CAM таблице! (всего записей: %u)\n",
+                   header.total_entries);
+        }
+
+        fclose(file);
+    }
+
+    // Применяем блокировки в системе
     snprintf(command, sizeof(command),
              "ebtables -A INPUT -s %02X:%02X:%02X:%02X:%02X:%02X -j DROP 2>/dev/null",
              mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
@@ -496,65 +1036,6 @@ void print_blocked_ips(anomaly_detector_t *detector)
     pthread_mutex_unlock(&detector->block_mutex);
 }
 
-// ===== CAM TABLE STUBS =====
-int cam_table_block_mac(cam_table_manager_t *manager, const uint8_t *mac_bytes, uint16_t vlan_id, const char *reason)
-{
-    return 0;
-}
-
-int cam_table_unblock_mac(cam_table_manager_t *manager, const uint8_t *mac_bytes, uint16_t vlan_id)
-{
-    return 0;
-}
-
-int cam_table_set_mac_pending(cam_table_manager_t *manager, const uint8_t *mac_bytes, uint16_t vlan_id, const char *reason)
-{
-    return 0;
-}
-
-int cam_table_init(cam_table_manager_t *manager, uft_mode_t default_mode)
-{
-    if (!manager)
-        return -1;
-
-    if (create_cam_directory() != 0)
-    {
-        printf("❌ Не удалось создать директорию для CAM таблицы\n");
-        return -1;
-    }
-
-    const char *filename = "/var/lib/cam-table/cam.bin";
-    FILE *test_file = fopen(filename, "rb");
-    if (!test_file)
-    {
-        printf("🆕 Создаю новую CAM таблицу: %s\n", filename);
-        if (init_cam_file(filename, DEFAULT_CAPACITY) != 0)
-        {
-            printf("❌ Ошибка создания CAM файла\n");
-            return -1;
-        }
-    }
-    else
-    {
-        fclose(test_file);
-        printf("📂 Загружаю существующую CAM таблицу\n");
-    }
-
-    manager->current_mode = default_mode;
-    manager->cam_table = cam_table_create(DEFAULT_CAPACITY);
-    manager->initialized = true;
-    manager->magic_number = 0xDEADBEEF;
-
-    printf("✅ CAM таблица инициализирована: %s\n", filename);
-    printf("   Режим: %d, Емкость: %d записей\n", default_mode, DEFAULT_CAPACITY);
-    return 0;
-}
-
-int cam_table_cleanup(cam_table_manager_t *manager)
-{
-    return 0;
-}
-
 // ===== MAIN MONITORING FUNCTION =====
 void start_comprehensive_monitoring(const char *interface, cam_table_manager_t *cam_manager)
 {
@@ -636,4 +1117,54 @@ void start_comprehensive_monitoring(const char *interface, cam_table_manager_t *
     printf("Обнаружено атак: %d\n", detector.total_anomalies);
     printf("Заблокировано IP: %d\n", detector.blocked_count);
     printf("IP-MAC записей: %d\n", detector.ip_mac_count);
+}
+
+int main(int argc, char *argv[])
+{
+    printf("=== 🐧 СИСТЕМА АВТОМАТИЧЕСКОЙ БЛОКИРОВКИ АТАК С CAM ТАБЛИЦЕЙ ===\n\n");
+
+    signal(SIGINT, handle_signal);
+    signal(SIGTERM, handle_signal);
+    signal(SIGUSR1, handle_usr1); // Для показа CAM таблицы по запросу
+
+    const char *interface = "lo";
+    if (argc > 1)
+    {
+        interface = argv[1];
+    }
+
+    if (getuid() != 0)
+    {
+        printf("❌ Требуются права root для блокировки!\n");
+        printf("💡 Запусти: sudo %s %s\n\n", argv[0], interface);
+        return 1;
+    }
+
+    // ИНИЦИАЛИЗАЦИЯ CAM ТАБЛИЦЫ
+    cam_table_manager_t cam_manager;
+    printf("🔄 Инициализация CAM таблицы...\n");
+    if (cam_table_init(&cam_manager, UFT_MODE_L2_BRIDGING) != 0)
+    {
+        printf("❌ Ошибка инициализации CAM таблицы!\n");
+        return 1;
+    }
+    printf("✅ CAM таблица инициализирована\n");
+
+    printf("💡 Система автоматически блокирует атакующие IP и MAC:\n");
+    printf("   - SYN Flood → Блокировка IP + запись MAC в CAM таблицу\n");
+    printf("   - DDoS атаки → Мгновенная блокировка IP/MAC\n");
+    printf("   - Port Scanning → Авто-бан IP/MAC\n");
+    printf("   - UDP Flood → Блокировка источника IP/MAC\n");
+    printf("   - Для просмотра CAM таблицы во время работы: sudo kill -USR1 %d\n\n", getpid());
+
+    start_comprehensive_monitoring(interface, &cam_manager);
+
+    // ПОКАЗАТЬ СОДЕРЖИМОЕ CAM ТАБЛИЦЫ ПОСЛЕ МОНИТОРИНГА
+    printf("\n=== ФИНАЛЬНОЕ СОСТОЯНИЕ CAM ТАБЛИЦЫ ===\n");
+    print_cam_table();
+
+    // ОСТАНОВКА CAM МЕНЕДЖЕРА (данные сохраняются в файле)
+    cam_table_cleanup(&cam_manager);
+
+    return 0;
 }

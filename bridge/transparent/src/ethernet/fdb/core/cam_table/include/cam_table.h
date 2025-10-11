@@ -52,6 +52,14 @@ extern "C"
 #define CAM_MAGIC 0xCA7AB1E
 #define CAM_VERSION 1
 #define DEFAULT_CAPACITY 256000
+
+#ifndef ENTRY_FREE
+#define ENTRY_FREE 0
+#define ENTRY_TRUSTED 1
+#define ENTRY_PENDING 2
+#define ENTRY_BLOCKED 3
+#endif
+
     /**
      * MAC Address Structure
      * 48-bit Ethernet MAC address
@@ -159,38 +167,6 @@ extern "C"
 #else
 #define SYS_GETPID_NR 0 /**< Unknown platform */
 #endif
-
-#pragma pack(push, 1)
-    typedef struct
-    {
-        uint32_t magic;
-        uint16_t version;
-        uint16_t entry_size;
-        uint32_t total_entries;
-        uint32_t trusted_count;
-        uint32_t pending_count;
-        uint32_t blocked_count;
-        uint32_t free_count;
-        uint64_t created_time;
-        uint64_t last_updated;
-        uint8_t reserved[40];
-    } cam_file_header_t;
-
-    typedef struct
-    {
-        uint8_t entry_type; // 0=trusted, 1=pending, 2=blocked
-        uint8_t mac[6];
-        uint16_t vlan_id;
-        uint32_t port_map;
-        uint32_t timestamp;
-        uint32_t last_seen;
-        uint16_t hit_count;
-        uint8_t attack_score;
-        uint8_t flags;
-        uint32_t reason_offset;
-        uint8_t reserved[4];
-    } cam_file_entry_t;
-#pragma pack(pop)
 
     /* ===== Data Type Definitions ===== */
 
