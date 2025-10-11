@@ -34,6 +34,11 @@ extern volatile sig_atomic_t stop_monitoring;
 #define CAM_VERSION 1           /* CAM file format version */
 #define DEFAULT_CAPACITY 256000 /* Default capacity for CAM table entries */
 
+// ===== BLOCKING LEVELS =====
+#define BLOCK_LEVEL_PENDING 1
+#define BLOCK_LEVEL_HARD 2
+#define BLOCK_LEVEL_PERMANENT 3
+
 // ===== CAM FILE STRUCTURES =====
 #pragma pack(push, 1)
 /**
@@ -143,6 +148,8 @@ typedef struct
     uint8_t mac[6];
     time_t block_time;
     int block_duration;
+    int block_level;
+    int violation_count;
     char reason[100];
 } blocked_ip_t;
 
@@ -473,5 +480,11 @@ int cam_table_unblock_mac(cam_table_manager_t *manager, const uint8_t *mac_bytes
  * Typically used for suspicious but not confirmed malicious addresses.
  */
 int cam_table_set_mac_pending(cam_table_manager_t *manager, const uint8_t *mac_bytes, uint16_t vlan_id, const char *reason);
+
+void apply_blocking_by_level(const char *ip, const uint8_t *mac, int block_level, const char *reason);
+void remove_blocking_by_level(const char *ip, const uint8_t *mac, int block_level);
+void print_cam_table();
+int is_mac_blocked(const uint8_t *mac_bytes);
+void handle_usr1(int sig);
 
 #endif /* CORE_H */

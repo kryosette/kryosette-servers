@@ -705,7 +705,7 @@ void block_ip(const char *ip, const uint8_t *mac, const char *reason, int durati
     {
         errno = EINVAL;
         printf("✗ Can't open log file");
-        return -1;
+        return;
     }
     else if (log_file)
     {
@@ -753,6 +753,24 @@ void add_to_block_list(anomaly_detector_t *detector, const char *ip, const uint8
     {
         if (strcmp(detector->blocked_ips[i].ip, ip) == 0)
         {
+            detector->blocked_ips[i].violation_count++;
+
+            if (detector->blocked_ips[i].violation_count >= 3)
+            {
+                detector->blocked_ips[i].block_level = BLOCK_LEVEL_PERMANENT;
+                detector->blocked_ips[i].block_duration = 0;
+                strcpy(detector->blocked_ips[i].reason, "PERMANENT BAN: Multiple violations");
+            }
+            else if (detector->blocked_ips[i].violation_count >= 2)
+            {
+                detector->blocked_ips[i].block_level = BLOCK_LEVEL_HARD;
+                detector->blocked_ips[i].block_duration = 3600;
+                strcpy(detector->blocked_ips[i].reason, "HARD BAN: Repeated violations");
+            }
+
+            printf("✓ IP %s is already blacklisted. Violations: %d, Level: %d\n",
+                   ip, detector->blocked_ips[i].violation_count, detector->blocked_ips[i].block_level);
+
             pthread_mutex_unlock(&detector->block_mutex);
             return;
         }
@@ -763,10 +781,10 @@ void add_to_block_list(anomaly_detector_t *detector, const char *ip, const uint8
         strncpy(detector->blocked_ips[detector->blocked_count].ip, ip, 15);
         memcpy(detector->blocked_ips[detector->blocked_count].mac, mac, 6);
         detector->blocked_ips[detector->blocked_count].block_time = time(NULL);
-        detector->blocked_ips[detector->blocked_count].block_duration = 300;
+        detector->blocked_ips[detector->blocked_count].block_duration = 3600;
         strncpy(detector->blocked_ips[detector->blocked_count].reason, reason, 99);
 
-        block_ip(ip, mac, reason, 300);
+        block_ip(ip, mac, reason, 3600);
 
         if (detector->cam_manager && detector->cam_manager->initialized)
         {
@@ -778,6 +796,73 @@ void add_to_block_list(anomaly_detector_t *detector, const char *ip, const uint8
     }
 
     pthread_mutex_unlock(&detector->block_mutex);
+}
+
+// ===== BLOCKING BY LEVEL =====
+void apply_blocking_by_level(const char *ip, const uint8_t *mac, int block_level, const char *reason)
+{
+    char command[256];
+
+    switch (block_level)
+    {
+    case BLOCK_LEVEL_PENDING:
+        printf("PENDING BLOCK: %s | MAC: %02X:%02X:%02X:%02X:%02X:%02X\n",
+               ip, mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+
+        snprintf(command, sizeof(command),
+                 "iptables -A INPUT -s %s -m limit --limit 10/min -j LOG --log-prefix \"PENDING_BLOCK: \" 2>/dev/null", ip);
+        system(command);
+        break;
+
+    case BLOCK_LEVEL_HARD:
+        printf("HARD BLOCK: %s | MAC: %02X:%02X:%02X:%02X:%02X:%02X\n",
+               ip, mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+
+        snprintf(command, sizeof(command), "iptables -A INPUT -s %s -j DROP 2>/dev/null", ip);
+        system(command);
+
+        snprintf(command, sizeof(command),
+                 "ebtables -A INPUT -s %02X:%02X:%02X:%02X:%02X:%02X -j DROP 2>/dev/null",
+                 mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+        system(command);
+        break;
+
+    case BLOCK_LEVEL_PERMANENT:
+        printf("PERMANENT BLOCK: %s | MAC: %02X:%02X:%02X:%02X:%02X:%02X\n",
+               ip, mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+
+        snprintf(command, sizeof(command), "iptables -A INPUT -s %s -j DROP 2>/dev/null", ip);
+        system(command);
+
+        snprintf(command, sizeof(command),
+                 "ebtables -A INPUT -s %02X:%02X:%02X:%02X:%02X:%02X -j DROP 2>/dev/null",
+                 mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+        system(command);
+
+        snprintf(command, sizeof(command), "echo \"%s %02X:%02X:%02X:%02X:%02X:%02X %s\" >> /var/lib/cam-table/permanent_ban.list",
+                 ip, mac[0], mac[1], mac[2], mac[3], mac[4], mac[5], reason);
+        system(command);
+        break;
+    }
+
+    // Логируем в файл
+    FILE *log_file = fopen("/mnt/c/Users/dmako/kryosette/kryosette-servers/bridge/var/log/cam-table/cam.log", "a");
+    if (log_file)
+    {
+        time_t now = time(NULL);
+        char timestamp[20];
+        strftime(timestamp, sizeof(timestamp), "%Y-%m-%d %H:%M:%S", localtime(&now));
+
+        const char *level_str = "PENDING";
+        if (block_level == BLOCK_LEVEL_HARD)
+            level_str = "HARD";
+        else if (block_level == BLOCK_LEVEL_PERMANENT)
+            level_str = "PERMANENT";
+
+        fprintf(log_file, "%s: %s_BLOCK IP:%s MAC:%02X:%02X:%02X:%02X:%02X:%02X - %s\n",
+                timestamp, level_str, ip, mac[0], mac[1], mac[2], mac[3], mac[4], mac[5], reason);
+        fclose(log_file);
+    }
 }
 
 /**
@@ -796,14 +881,23 @@ void check_block_expiry(anomaly_detector_t *detector)
 
     while (i < detector->blocked_count)
     {
-        if (now - detector->blocked_ips[i].block_time > detector->blocked_ips[i].block_duration)
+        blocked_ip_t *blocked = &detector->blocked_ips[i];
+
+        if (blocked->block_level == BLOCK_LEVEL_PERMANENT)
+        {
+            i++;
+            continue;
+        }
+
+        if (blocked->block_duration > 0 && (now - blocked->block_time > blocked->block_duration))
         {
             printf("→ IP %s block time expired\n", detector->blocked_ips[i].ip);
-            unblock_ip(detector->blocked_ips[i].ip);
+
+            remove_blocking_by_level(blocked->ip, blocked->mac, blocked->block_level);
 
             if (detector->cam_manager && detector->cam_manager->initialized)
             {
-                cam_table_unblock_mac(detector->cam_manager, detector->blocked_ips[i].mac, 1);
+                cam_table_unblock_mac(detector->cam_manager, blocked->mac, 1);
             }
 
             for (int j = i; j < detector->blocked_count - 1; j++)
@@ -818,6 +912,35 @@ void check_block_expiry(anomaly_detector_t *detector)
         }
     }
     pthread_mutex_unlock(&detector->block_mutex);
+}
+
+void remove_blocking_by_level(const char *ip, const uint8_t *mac, int block_level)
+{
+    char command[256];
+
+    switch (block_level)
+    {
+    case BLOCK_LEVEL_PENDING:
+        printf("🟢 Снимаем PENDING блокировку: %s\n", ip);
+        snprintf(command, sizeof(command), "iptables -D INPUT -s %s -m limit --limit 10/min -j LOG --log-prefix \"PENDING_BLOCK: \" 2>/dev/null", ip);
+        system(command);
+        break;
+
+    case BLOCK_LEVEL_HARD:
+        printf("🟢 Снимаем HARD блокировку: %s\n", ip);
+        snprintf(command, sizeof(command), "iptables -D INPUT -s %s -j DROP 2>/dev/null", ip);
+        system(command);
+        snprintf(command, sizeof(command),
+                 "ebtables -D INPUT -s %02X:%02X:%02X:%02X:%02X:%02X -j DROP 2>/dev/null",
+                 mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+        system(command);
+        break;
+
+    case BLOCK_LEVEL_PERMANENT:
+        // PERMANENT блокировки не снимаются автоматически
+        printf("🔴 PERMANENT блокировка %s остается активной\n", ip);
+        break;
+    }
 }
 
 // ===== PACKET ANALYSIS =====
@@ -1286,14 +1409,31 @@ void print_blocked_ips(anomaly_detector_t *detector)
 
     if (detector->blocked_count > 0)
     {
-        printf("\n→ BLOCKED IPS (%d):\n", detector->blocked_count);
+        printf("\n BLOCKED IP (%d):\n", detector->blocked_count);
         for (int i = 0; i < detector->blocked_count; i++)
         {
-            time_t remaining = detector->blocked_ips[i].block_duration - (time(NULL) - detector->blocked_ips[i].block_time);
-            printf("  %s (MAC: %02X:%02X:%02X:%02X:%02X:%02X) - %s (remaining: %ld sec)\n",
-                   detector->blocked_ips[i].ip, detector->blocked_ips[i].mac[0], detector->blocked_ips[i].mac[1],
-                   detector->blocked_ips[i].mac[2], detector->blocked_ips[i].mac[3], detector->blocked_ips[i].mac[4],
-                   detector->blocked_ips[i].mac[5], detector->blocked_ips[i].reason, remaining > 0 ? remaining : 0);
+            blocked_ip_t *blocked = &detector->blocked_ips[i];
+            const char *level_str = "PENDING";
+            if (blocked->block_level == BLOCK_LEVEL_HARD)
+                level_str = "HARD";
+            else if (blocked->block_level == BLOCK_LEVEL_PERMANENT)
+                level_str = "PERMANENT";
+
+            if (blocked->block_level == BLOCK_LEVEL_PERMANENT)
+            {
+                printf("  %s (MAC: %02X:%02X:%02X:%02X:%02X:%02X) - %s [%s] [Нарушений: %d]\n",
+                       blocked->ip, blocked->mac[0], blocked->mac[1], blocked->mac[2],
+                       blocked->mac[3], blocked->mac[4], blocked->mac[5],
+                       blocked->reason, level_str, blocked->violation_count);
+            }
+            else
+            {
+                time_t remaining = blocked->block_duration - (time(NULL) - blocked->block_time);
+                printf("  %s (MAC: %02X:%02X:%02X:%02X:%02X:%02X) - %s [%s] [Осталось: %ld сек] [Нарушений: %d]\n",
+                       blocked->ip, blocked->mac[0], blocked->mac[1], blocked->mac[2],
+                       blocked->mac[3], blocked->mac[4], blocked->mac[5],
+                       blocked->reason, level_str, remaining > 0 ? remaining : 0, blocked->violation_count);
+            }
         }
     }
 
