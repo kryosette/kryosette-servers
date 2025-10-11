@@ -699,8 +699,15 @@ void block_ip(const char *ip, const uint8_t *mac, const char *reason, int durati
     snprintf(command, sizeof(command), "iptables -A INPUT -s %s -j DROP 2>/dev/null", ip);
     system(command);
 
-    FILE *log_file = fopen("ddos_block.log", "a");
-    if (log_file)
+    FILE *log_file = fopen("/mnt/c/Users/dmako/kryosette/kryosette-servers/bridge/var/log/cam-table/cam.log", "a");
+
+    if (!log_file)
+    {
+        errno = EINVAL;
+        printf("✗ Can't open log file");
+        return -1;
+    }
+    else if (log_file)
     {
         time_t now = time(NULL);
         char timestamp[20];
