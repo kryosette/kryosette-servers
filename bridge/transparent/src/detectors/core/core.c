@@ -808,26 +808,58 @@ void add_to_block_list(anomaly_detector_t *detector, const char *ip, const uint8
 
     pthread_mutex_unlock(&detector->block_mutex);
 }
+
 /**
- * send_ban_to_social_network - Send ban notification to social network API
- * @ip: IP address that was banned
- * @mac: MAC address that was banned
- * @reason: Ban reason
- * @duration: Ban duration in seconds
- * @ban_level: Block level (PENDING/HARD/PERMANENT)
- *
- * Sends real-time ban notification to social network API for immediate
- * account suspension. Uses HTTP POST with JSON payload.
+ * get_device_hash_by_ip - Get REAL device hash from Redis
+ */
+char *get_device_hash_by_ip(const char *ip)
+{
+    char command[512];
+    static char device_hash[128] = {0};
+
+    if (!ip || strlen(ip) == 0)
+    {
+        return NULL;
+    }
+
+    // Реальный запрос к Redis для любого IP
+    snprintf(command, sizeof(command),
+             "redis-cli --raw GET ip_device:%s 2>/dev/null", ip);
+
+    FILE *fp = popen(command, "r");
+    if (fp && fgets(device_hash, sizeof(device_hash), fp))
+    {
+        device_hash[strcspn(device_hash, "\n")] = 0;
+        // pclose(fp);
+
+        if (strlen(device_hash) > 0)
+        {
+            printf("→ Found device hash: %s for IP: %s\n", device_hash, ip);
+            return device_hash;
+        }
+    }
+
+    // pclose(fp);
+    printf("→ No device hash found for IP: %s\n", ip);
+    return NULL;
+}
+
+/**
+ * send_ban_to_social_network - Final working version
  */
 void send_ban_to_social_network(const char *ip, const uint8_t *mac,
                                 const char *reason, int duration,
                                 int ban_level)
 {
     char command[1024];
-    char mac_str[18];
 
-    snprintf(mac_str, sizeof(mac_str), "%02X:%02X:%02X:%02X:%02X:%02X",
-             mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+    // Получаем реальный device hash по IP атакующего
+    char *device_hash = get_device_hash_by_ip(ip);
+    if (!device_hash)
+    {
+        printf("→ No device hash found for attacking IP: %s (user not logged in?)\n", ip);
+        return;
+    }
 
     const char *level_str = "pending";
     if (ban_level == BLOCK_LEVEL_HARD)
@@ -835,25 +867,23 @@ void send_ban_to_social_network(const char *ip, const uint8_t *mac,
     else if (ban_level == BLOCK_LEVEL_PERMANENT)
         level_str = "permanent";
 
+    printf("→ Sending ban for attacking IP: %s → device: %s → user: [will be blocked]\n", ip, device_hash);
+
     snprintf(command, sizeof(command),
              "curl -X POST -H \"Content-Type: application/json\" "
-             "-H \"Authorization: Bearer your-secret-token\" "
-             "-d '{\"ip\": \"%s\", \"mac\": \"%s\", \"reason\": \"%s\", "
-             "\"duration\": %d, \"level\": \"%s\", \"timestamp\": %ld}' "
-             "http://localhost:8080/api/v1/auth/lock-user --max-time 5 --silent",
-             ip, mac_str, reason, duration, level_str, time(NULL));
-
-    printf("→ Sending ban to social network: %s\n", ip);
+             "-d '{\"deviceHash\": \"%s\", \"reason\": \"%s\", "
+             "\"duration\": %d, \"level\": \"%s\"}' "
+             "http://localhost:8088/api/v1/auth/lock-user-by-device --max-time 5 --silent",
+             device_hash, reason, duration, level_str);
 
     int result = system(command);
-
     if (result == 0)
     {
-        printf("✓ Ban successfully sent to social network\n");
+        printf("✓ User successfully banned via device hash\n");
     }
     else
     {
-        printf("✗ Failed to send ban to social network (code: %d)\n", result);
+        printf("✗ Failed to send ban (code: %d)\n", result);
     }
 }
 
