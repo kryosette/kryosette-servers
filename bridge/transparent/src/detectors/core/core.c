@@ -554,6 +554,82 @@ void init_detector(anomaly_detector_t *detector, cam_table_manager_t *cam_manage
 }
 
 /**
+ * get_device_hash_by_ip - Get REAL device hash from Redis
+ */
+char *get_device_hash_by_ip(const char *ip)
+{
+    char command[512];
+    static char device_hash[128] = {0};
+
+    if (!ip || strlen(ip) == 0)
+    {
+        return NULL;
+    }
+
+    snprintf(command, sizeof(command),
+             "redis-cli -a 1234 --raw GET ip_device:%s 2>/dev/null", ip);
+
+    FILE *fp = popen(command, "r");
+    if (fp && fgets(device_hash, sizeof(device_hash), fp))
+    {
+        device_hash[strcspn(device_hash, "\n")] = 0;
+        // pclose(fp);
+
+        if (strlen(device_hash) > 0)
+        {
+            printf("→ Found device hash: %s for IP: %s\n", device_hash, ip);
+            return device_hash;
+        }
+    }
+
+    // pclose(fp);
+    printf("→ No device hash found for IP: %s\n", ip);
+    return NULL;
+}
+
+/**
+ * send_ban_to_social_network - Final working version
+ */
+void send_ban_to_social_network(const char *ip, const uint8_t *mac,
+                                const char *reason, int duration,
+                                int ban_level)
+{
+    char command[1024];
+
+    char *device_hash = get_device_hash_by_ip(ip);
+    if (!device_hash)
+    {
+        printf("→ No device hash found for attacking IP: %s (user not logged in?)\n", ip);
+        return;
+    }
+
+    const char *level_str = "pending";
+    if (ban_level == BLOCK_LEVEL_HARD)
+        level_str = "hard";
+    else if (ban_level == BLOCK_LEVEL_PERMANENT)
+        level_str = "permanent";
+
+    printf("→ Sending ban for attacking IP: %s → device: %s → user: [will be blocked]\n", ip, device_hash);
+
+    snprintf(command, sizeof(command),
+             "curl -X POST -H \"Content-Type: application/json\" "
+             "-d '{\"deviceHash\": \"%s\", \"reason\": \"%s\", "
+             "\"duration\": %d, \"level\": \"%s\"}' "
+             "http://172.22.224.1:8088/api/v1/auth/lock-user-by-device --max-time 5 --silent",
+             device_hash, reason, duration, level_str);
+
+    int result = system(command);
+    if (result == 0)
+    {
+        printf("✓ User successfully banned via device hash\n");
+    }
+    else
+    {
+        printf("✗ Failed to send ban (code: %d)\n", result);
+    }
+}
+
+/**
  * block_ip - Block IP and MAC address with system-level enforcement
  * @ip: IP address to block
  * @mac: MAC address to block (6-byte array)
@@ -807,84 +883,6 @@ void add_to_block_list(anomaly_detector_t *detector, const char *ip, const uint8
     }
 
     pthread_mutex_unlock(&detector->block_mutex);
-}
-
-/**
- * get_device_hash_by_ip - Get REAL device hash from Redis
- */
-char *get_device_hash_by_ip(const char *ip)
-{
-    char command[512];
-    static char device_hash[128] = {0};
-
-    if (!ip || strlen(ip) == 0)
-    {
-        return NULL;
-    }
-
-    // Реальный запрос к Redis для любого IP
-    snprintf(command, sizeof(command),
-             "redis-cli --raw GET ip_device:%s 2>/dev/null", ip);
-
-    FILE *fp = popen(command, "r");
-    if (fp && fgets(device_hash, sizeof(device_hash), fp))
-    {
-        device_hash[strcspn(device_hash, "\n")] = 0;
-        // pclose(fp);
-
-        if (strlen(device_hash) > 0)
-        {
-            printf("→ Found device hash: %s for IP: %s\n", device_hash, ip);
-            return device_hash;
-        }
-    }
-
-    // pclose(fp);
-    printf("→ No device hash found for IP: %s\n", ip);
-    return NULL;
-}
-
-/**
- * send_ban_to_social_network - Final working version
- */
-void send_ban_to_social_network(const char *ip, const uint8_t *mac,
-                                const char *reason, int duration,
-                                int ban_level)
-{
-    char command[1024];
-
-    // Получаем реальный device hash по IP атакующего
-    char *device_hash = get_device_hash_by_ip(ip);
-    if (!device_hash)
-    {
-        printf("→ No device hash found for attacking IP: %s (user not logged in?)\n", ip);
-        return;
-    }
-
-    const char *level_str = "pending";
-    if (ban_level == BLOCK_LEVEL_HARD)
-        level_str = "hard";
-    else if (ban_level == BLOCK_LEVEL_PERMANENT)
-        level_str = "permanent";
-
-    printf("→ Sending ban for attacking IP: %s → device: %s → user: [will be blocked]\n", ip, device_hash);
-
-    snprintf(command, sizeof(command),
-             "curl -X POST -H \"Content-Type: application/json\" "
-             "-d '{\"deviceHash\": \"%s\", \"reason\": \"%s\", "
-             "\"duration\": %d, \"level\": \"%s\"}' "
-             "http://localhost:8088/api/v1/auth/lock-user-by-device --max-time 5 --silent",
-             device_hash, reason, duration, level_str);
-
-    int result = system(command);
-    if (result == 0)
-    {
-        printf("✓ User successfully banned via device hash\n");
-    }
-    else
-    {
-        printf("✗ Failed to send ban (code: %d)\n", result);
-    }
 }
 
 // ===== BLOCKING BY LEVEL =====

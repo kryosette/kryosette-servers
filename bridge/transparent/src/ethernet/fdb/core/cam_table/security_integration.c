@@ -57,7 +57,7 @@ void enhanced_monitoring_with_cam(const char *interface, cam_table_manager_t *ca
         cam_table_init(cam_manager, UFT_MODE_L2_BRIDGING);
     }
 
-    // ... (rest of your monitoring setup)
+    // ... (rest of my monitoring setup)
 
     while (!stop_monitoring)
     {
