@@ -10,51 +10,54 @@ extern "C"
 {
 #endif
 
-// ==================== PDU Types ====================
-#define SNMP_MSG_GET 0xA0
-#define SNMP_MSG_GETNEXT 0xA1
-#define SNMP_MSG_RESPONSE 0xA2
-#define SNMP_MSG_SET 0xA3
-#define SNMP_MSG_GETBULK 0xA5
-#define SNMP_MSG_INFORM 0xA6
-#define SNMP_MSG_TRAP2 0xA7
-#define SNMP_MSG_REPORT 0xA8
+    // ==================== Error Codes ====================
+    extern const uint8_t SNMP_ERR_NOERROR = 0;
+    extern const uint8_t SNMP_ERR_TOOBIG = 1;
+    extern const uint8_t SNMP_ERR_NOSUCHNAME = 2;
+    extern const uint8_t SNMP_ERR_BADVALUE = 3;
+    extern const uint8_t SNMP_ERR_READONLY = 4;
+    extern const uint8_t SNMP_ERR_GENERR = 5;
+    extern const uint8_t SNMP_ERR_NOACCESS = 6;
+    extern const uint8_t SNMP_ERR_WRONGTYPE = 7;
+    extern const uint8_t SNMP_ERR_WRONGLENGTH = 8;
+    extern const uint8_t SNMP_ERR_WRONGENCODING = 9;
+    extern const uint8_t SNMP_ERR_WRONGVALUE = 10;
+    extern const uint8_t SNMP_ERR_NOCREATION = 11;
+    extern const uint8_t SNMP_ERR_INCONSISTENTVALUE = 12;
+    extern const uint8_t SNMP_ERR_RESOURCEUNAVAILABLE = 13;
+    extern const uint8_t SNMP_ERR_COMMITFAILED = 14;
+    extern const uint8_t SNMP_ERR_UNDOFAILED = 15;
+    extern const uint8_t SNMP_ERR_AUTHORIZATION = 16;
+    extern const uint8_t SNMP_ERR_NOTWRITABLE = 17;
+    extern const uint8_t SNMP_ERR_INCONSISTENTNAME = 18;
 
-// ==================== ASN.1 Types ====================
-#define ASN_BOOLEAN 0x01
-#define ASN_INTEGER 0x02
-#define ASN_BIT_STR 0x03
-#define ASN_OCTET_STR 0x04
-#define ASN_NULL 0x05
-#define ASN_OBJECT_ID 0x06
-#define ASN_SEQUENCE 0x30
-#define ASN_IPADDRESS (0x00 | 0x40)
-#define ASN_COUNTER (0x01 | 0x40)
-#define ASN_GAUGE (0x02 | 0x40)
-#define ASN_TIMETICKS (0x03 | 0x40)
-#define ASN_OPAQUE (0x04 | 0x40)
-#define ASN_COUNTER64 (0x06 | 0x40)
+    // ==================== PDU Types ====================
+    extern const uint8_t SNMP_MSG_GET = 0xA0;
+    extern const uint8_t SNMP_MSG_GETNEXT = 0xA1;
+    extern const uint8_t SNMP_MSG_RESPONSE = 0xA2;
+    extern const uint8_t SNMP_MSG_SET = 0xA3;
+    extern const uint8_t SNMP_MSG_GETBULK = 0xA5;
+    extern const uint8_t SNMP_MSG_INFORM = 0xA6;
+    extern const uint8_t SNMP_MSG_TRAP2 = 0xA7;
+    extern const uint8_t SNMP_MSG_REPORT = 0xA8;
 
-// ==================== Error Codes ====================
-#define SNMP_ERR_NOERROR 0
-#define SNMP_ERR_TOOBIG 1
-#define SNMP_ERR_NOSUCHNAME 2
-#define SNMP_ERR_BADVALUE 3
-#define SNMP_ERR_READONLY 4
-#define SNMP_ERR_GENERR 5
-#define SNMP_ERR_NOACCESS 6
-#define SNMP_ERR_WRONGTYPE 7
-#define SNMP_ERR_WRONGLENGTH 8
-#define SNMP_ERR_WRONGENCODING 9
-#define SNMP_ERR_WRONGVALUE 10
-#define SNMP_ERR_NOCREATION 11
-#define SNMP_ERR_INCONSISTENTVALUE 12
-#define SNMP_ERR_RESOURCEUNAVAILABLE 13
-#define SNMP_ERR_COMMITFAILED 14
-#define SNMP_ERR_UNDOFAILED 15
-#define SNMP_ERR_AUTHORIZATION 16
-#define SNMP_ERR_NOTWRITABLE 17
-#define SNMP_ERR_INCONSISTENTNAME 18
+    // ==================== ASN.1 Types ====================
+    extern const uint8_t ASN_BOOLEAN = 0x01;
+    extern const uint8_t ASN_INTEGER = 0x02;
+    extern const uint8_t ASN_BIT_STR = 0x03;
+    extern const uint8_t ASN_OCTET_STR = 0x04;
+    extern const uint8_t ASN_NULL = 0x05;
+    extern const uint8_t ASN_OBJECT_ID = 0x06;
+    extern const uint8_t ASN_SEQUENCE = 0x30;
+
+    // Application types
+    extern const uint8_t ASN_APPLICATION_MASK = 0x40;
+    extern const uint8_t ASN_IPADDRESS = 0x00 | ASN_APPLICATION_MASK;
+    extern const uint8_t ASN_COUNTER = 0x01 | ASN_APPLICATION_MASK;
+    extern const uint8_t ASN_GAUGE = 0x02 | ASN_APPLICATION_MASK;
+    extern const uint8_t ASN_TIMETICKS = 0x03 | ASN_APPLICATION_MASK;
+    extern const uint8_t ASN_OPAQUE = 0x04 | ASN_APPLICATION_MASK;
+    extern const uint8_t ASN_COUNTER64 = 0x06 | ASN_APPLICATION_MASK;
 
     // ==================== Structures ====================
     typedef uint32_t oid;
