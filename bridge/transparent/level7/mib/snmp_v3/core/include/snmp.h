@@ -7,16 +7,17 @@ extern "C"
 {
 #endif
 
-// ==================== Network Constants ====================
-#define SNMP_PORT 161      // SNMP agent request port
-#define SNMP_TRAP_PORT 162 // SNMP manager notification port
+    // ==================== SNMP Port Constants ====================
+    extern const uint16_t SNMP_PORT;      // SNMP agent request port
+    extern const uint16_t SNMP_TRAP_PORT; // SNMP manager notification port
 
-#define SNMP_MAX_MSG_SIZE 1500          // Ethernet MTU
-#define SNMP_MIN_MSG_SIZE 484           // RFC 3416 minimum
-#define SNMP_MAX_PACKET_SIZE 0x7FFFFFFF // Maximum theoretical size
+    // ==================== SNMP Size Constants ====================
+    extern const size_t SNMP_MAX_MSG_SIZE;     // Ethernet MTU
+    extern const size_t SNMP_MIN_MSG_SIZE;     // RFC 3416 minimum
+    extern const int32_t SNMP_MAX_PACKET_SIZE; // Maximum theoretical size
 
-// ==================== Protocol Version ====================
-#define SNMP_VERSION_3 3 // SNMPv3
+    // ==================== Protocol Version ====================
+    static const int SNMP_VERSION_3 = 3; // SNMPv3
 
     // ==================== PDU Type Constants ====================
     typedef enum
@@ -31,14 +32,14 @@ extern "C"
         SNMP_PDU_REPORT = 0xA8    // 168 - Report
     } SnmpPduType;
 
-#define SNMP_MSG_GET SNMP_PDU_GET
-#define SNMP_MSG_GETNEXT SNMP_PDU_GETNEXT
-#define SNMP_MSG_RESPONSE SNMP_PDU_RESPONSE
-#define SNMP_MSG_SET SNMP_PDU_SET
-#define SNMP_MSG_GETBULK SNMP_PDU_GETBULK
-#define SNMP_MSG_INFORM SNMP_PDU_INFORM
-#define SNMP_MSG_TRAP2 SNMP_PDU_TRAP2
-#define SNMP_MSG_REPORT SNMP_PDU_REPORT
+    // #define SNMP_MSG_GET SNMP_PDU_GET
+    // #define SNMP_MSG_GETNEXT SNMP_PDU_GETNEXT
+    // #define SNMP_MSG_RESPONSE SNMP_PDU_RESPONSE
+    // #define SNMP_MSG_SET SNMP_PDU_SET
+    // #define SNMP_MSG_GETBULK SNMP_PDU_GETBULK
+    // #define SNMP_MSG_INFORM SNMP_PDU_INFORM
+    // #define SNMP_MSG_TRAP2 SNMP_PDU_TRAP2
+    // #define SNMP_MSG_REPORT SNMP_PDU_REPORT
 
     // ==================== Internal Processing States ====================
     typedef enum
