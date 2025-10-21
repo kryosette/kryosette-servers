@@ -115,20 +115,6 @@ extern "C"
         size_t transport_data_len;
     } snmp_pdu_t;
 
-    typedef struct snmp_pdu
-    {
-        snmp_pdu_type_t command;
-        uint32_t reqid;
-        uint32_t errstat;
-        uint32_t errindex;
-        struct variable_list *variables;
-
-        u_char *contextEngineID;
-        size_t contextEngineIDLen;
-        char *contextName;
-
-    } snmp_pdu_t;
-
     snmp_pdu_t *snmp_pdu_create(snmp_pdu_type_t pdu_type);
     void snmp_pdu_free(snmp_pdu_t *pdu);
     int snmp_pdu_add_var(snmp_pdu_t *pdu, const oid *objid, size_t objid_len,
