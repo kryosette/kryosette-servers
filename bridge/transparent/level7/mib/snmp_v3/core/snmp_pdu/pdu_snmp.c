@@ -4,7 +4,7 @@
 #include "pdu_snmp.h"
 
 snmp_pdu_t *snmp_pdu_create(snmp_pdu_type_t pdu_type) {
-    snmp_pdu_t *pdu = calloc(sizeof(snmp_pdu_t));
+    snmp_pdu_t *pdu = calloc(1, sizeof(snmp_pdu_t));
     if (pdu == NULL || pdu == 0) {
         return NULL;
     }
@@ -34,4 +34,5 @@ snmp_pdu_t *snmp_pdu_create(snmp_pdu_type_t pdu_type) {
     
     return pdu;
   }
+
 
