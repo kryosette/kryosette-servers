@@ -10,7 +10,7 @@ extern "C"
 {
 #endif
 
-// убрать инициализацию всех extern const чтобы не втыкало и вынести в constants.c
+// убрать инициализацию всех shit-extern const чтобы не втыкало и вынести в constants.c
     // ==================== Error Codes ====================
     extern const uint8_t SNMP_ERR_NOERROR = 0;
     extern const uint8_t SNMP_ERR_TOOBIG = 1;
