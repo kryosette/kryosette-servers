@@ -10,20 +10,19 @@ extern "C"
 {
 #endif
 
-// убрать инициализацию всех shit-extern const чтобы не втыкало и вынести в constants.c
     // ==================== Error Codes ====================
-    extern const uint8_t SNMP_ERR_NOERROR = 0;
-    extern const uint8_t SNMP_ERR_TOOBIG = 1;
-    extern const uint8_t SNMP_ERR_NOSUCHNAME = 2;
-    extern const uint8_t SNMP_ERR_BADVALUE = 3;
-    extern const uint8_t SNMP_ERR_READONLY = 4;
-    extern const uint8_t SNMP_ERR_GENERR = 5;
-    extern const uint8_t SNMP_ERR_NOACCESS = 6;
-    extern const uint8_t SNMP_ERR_WRONGTYPE = 7;
-    extern const uint8_t SNMP_ERR_WRONGLENGTH = 8;
-    extern const uint8_t SNMP_ERR_WRONGENCODING = 9;
-    extern const uint8_t SNMP_ERR_WRONGVALUE = 10;
-    extern const uint8_t SNMP_ERR_NOCREATION = 11;
+    extern const uint8_t SNMP_ERR_NOERROR;
+    extern const uint8_t SNMP_ERR_TOOBIG;
+    extern const uint8_t SNMP_ERR_NOSUCHNAME;
+    extern const uint8_t SNMP_ERR_BADVALUE;
+    extern const uint8_t SNMP_ERR_READONLY;
+    extern const uint8_t SNMP_ERR_GENERR;
+    extern const uint8_t SNMP_ERR_NOACCESS;
+    extern const uint8_t SNMP_ERR_WRONGTYPE;
+    extern const uint8_t SNMP_ERR_WRONGLENGTH;
+    extern const uint8_t SNMP_ERR_WRONGENCODING;
+    extern const uint8_t SNMP_ERR_WRONGVALUE;
+    extern const uint8_t SNMP_ERR_NOCREATION;
     extern const uint8_t SNMP_ERR_INCONSISTENTVALUE = 12;
     extern const uint8_t SNMP_ERR_RESOURCEUNAVAILABLE = 13;
     extern const uint8_t SNMP_ERR_COMMITFAILED = 14;
