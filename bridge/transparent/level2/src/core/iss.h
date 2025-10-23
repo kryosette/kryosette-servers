@@ -1,3 +1,4 @@
+#pragma once
 #ifndef ISS_H
 #define ISS_H
 
