@@ -26,14 +26,52 @@ flowchart TD
             MAC_FCS --> MAC_OUT[Выход на физический уровень L1]
         end
 
-        subgraph PROTOCOLS [Протоколы канального уровня]
-            direction TB
-            P_STP[STP<br/>Spanning Tree Protocol] --> P_BPDU[BPDU кадры<br/>EtherType: 0x4242]
-            P_LLDP[LLDP<br/>Link Layer Discovery] --> P_LLDP_FRAME[LLDP кадры<br/>EtherType: 0x88CC]
-            P_VLAN[VLAN 802.1Q] --> P_TAGGING[VLAN Tagging<br/>Priority, VLAN ID]
-            P_ARP[ARP] --> P_ARP_REQ[ARP Request/Reply]
-            P_CDP[CDP - Cisco] --> P_CDP_FRAME[CDP кадры]
-        end
+        subgraph PROTOCOLS [Протоколы канального уровня - RFC/IEEE Standards]
+    direction TB
+    
+    %% IEEE 802.3 Standards - MAC Layer
+    P_ETHERNET[Ethernet MAC<br/>IEEE 802.3-2018<br/>MAC Layer<br/>https://standards.ieee.org/ieee/802.3/7043/] --> P_MAC[MAC Framing<br/>Preamble, SFD, FCS<br/>EtherType range: 0x0000-0x05DC]
+    
+    %% IEEE 802.1Q Standards - VLAN
+    P_VLAN[VLAN Tagging<br/>IEEE 802.1Q-2018<br/>Virtual LAN<br/>https://standards.ieee.org/ieee/802.1Q/6847/] --> P_TAGGING[VLAN Tagging<br/>TPID: 0x8100<br/>Priority, VLAN ID]
+    P_QINQ[Q-in-Q<br/>IEEE 802.1ad-2005<br/>Provider Bridges<br/>https://standards.ieee.org/ieee/802.1ad/2919/] --> P_TAGGING
+    
+    %% STP Family - IEEE 802.1D
+    P_STP[STP<br/>IEEE 802.1D-2004<br/>Spanning Tree Protocol<br/>https://standards.ieee.org/ieee/802.1D/3297/] --> P_BPDU[BPDU Frames<br/>EtherType: 0x4242<br/>Destination: 01-80-C2-00-00-00]
+    P_RSTP[RSTP<br/>IEEE 802.1w-2001<br/>Rapid STP<br/>https://standards.ieee.org/ieee/802.1w/2945/] --> P_BPDU
+    P_MSTP[MSTP<br/>IEEE 802.1s-2002<br/>Multiple STP<br/>https://standards.ieee.org/ieee/802.1s/2947/] --> P_BPDU
+    
+    %% LLDP - IEEE 802.1AB
+    P_LLDP[LLDP<br/>IEEE 802.1AB-2016<br/>Link Layer Discovery<br/>https://standards.ieee.org/ieee/802.1AB/5999/] --> P_LLDP_FRAME[LLDP Frames<br/>EtherType: 0x88CC<br/>Destination: 01-80-C2-00-00-0E]
+    P_LLDP_MED[LLDP-MED<br/>ANSI/TIA-1057<br/>Media Endpoint<br/>https://webstore.ansi.org/standards/tia/tia1057] --> P_LLDP_FRAME
+    
+    %% ARP - RFC Standards
+    P_ARP[ARP<br/>RFC 826<br/>Address Resolution<br/>https://tools.ietf.org/html/rfc826] --> P_ARP_FRAME[ARP Packets<br/>EtherType: 0x0806]
+    P_RARP[RARP<br/>RFC 903<br/>Reverse ARP<br/>https://tools.ietf.org/html/rfc903] --> P_ARP_FRAME
+    
+    %% LACP - IEEE 802.1AX
+    P_LACP[LACP<br/>IEEE 802.1AX-2020<br/>Link Aggregation<br/>https://standards.ieee.org/ieee/802.1AX/6960/] --> P_LACP_FRAME[LACPDU Frames<br/>EtherType: 0x8809<br/>Subtype: 0x01]
+    
+    %% Flow Control - IEEE 802.3x
+    P_PAUSE[Flow Control<br/>IEEE 802.3x<br/>PAUSE Frames<br/>https://standards.ieee.org/ieee/802.3/7043/] --> P_PAUSE_FRAME[PAUSE Frames<br/>EtherType: 0x8808]
+    
+    %% 802.1X Authentication
+    P_DOT1X[802.1X<br/>IEEE 802.1X-2010<br/>Port-based Auth<br/>https://standards.ieee.org/ieee/802.1X/4007/] --> P_EAPOL[EAPOL Frames<br/>EtherType: 0x888E]
+    
+    %% MVRP - IEEE 802.1Q
+    P_MVRP[MVRP<br/>IEEE 802.1Q-2018<br/>VLAN Registration<br/>https://standards.ieee.org/ieee/802.1Q/6847/] --> P_MVRP_FRAME[MVRP Frames<br/>EtherType: 0x88F5]
+    
+    %% CFM - IEEE 802.1ag
+    P_CFM[CFM<br/>IEEE 802.1ag-2007<br/>Connectivity Fault Mgmt<br/>https://standards.ieee.org/ieee/802.1ag/3295/] --> P_CFM_FRAME[CFM Frames<br/>EtherType: 0x8902]
+    
+    %% ERPS - ITU-T G.8032
+    P_ERPS[ERPS<br/>ITU-T G.8032<br/>Ethernet Ring Protection<br/>https://www.itu.int/rec/T-REC-G.8032] --> P_ERPS_FRAME[RAPS Frames<br/>EtherType: 0x88F6]
+    
+    %% Proprietary Protocols
+    P_CDP[CDP<br/>Cisco Proprietary<br/>Discovery Protocol] --> P_CDP_FRAME[CDP Frames<br/>EtherType: 0x2000]
+    P_EDP[EDP<br/>Extreme Networks<br/>Discovery Protocol] --> P_EDP_FRAME[EDP Frames<br/>EtherType: 0x88A6]
+    P_FDP[FDP<br/>Foundry Networks<br/>Discovery Protocol] --> P_FDP_FRAME[FDP Frames<br/>LLC DSAP: 0xAA]
+end
 
         subgraph FRAME_FLOW [Поток обработки кадров]
             direction LR
