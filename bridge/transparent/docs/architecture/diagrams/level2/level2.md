@@ -26,7 +26,7 @@ flowchart TD
             MAC_FCS --> MAC_OUT[Выход на физический уровень L1]
         end
 
-        subgraph PROTOCOLS [Протоколы канального уровня - RFC/IEEE Standards]
+    subgraph PROTOCOLS [Протоколы канального уровня - RFC/IEEE Standards]
         direction TB
         
         %% IEEE 802.3 Standards - MAC Layer
@@ -77,35 +77,38 @@ flowchart TD
         %% PPP Protocols
         P_PPP[PPP<br/>RFC 1661<br/>Point-to-Point Protocol] --> P_PPP_FRAME[PPP Frames<br/>Protocol field: 0x0021]
         P_PPTP[PPTP<br/>RFC 2637<br/>Point-to-Point Tunneling] --> P_PPP_FRAME
-        P_CHAP[CHAP\It is used in specific areas.<br/>RFC 1994<br/>Challenge Handshake Auth] --> P_PPP_FRAME
-        P_PAP[PAP<br/>RFC 1334<br/>Password Auth Protocol] --> P_PPP_FRAME
+        P_CHAP[CHAP<br/>RFC 1994<br/>Challenge Handshake Auth] --> P_PPP_FRAME
+        P_PAP[PAP:::deprecated<br/>RFC 1334<br/>Password Auth Protocol] --> P_PPP_FRAME
         
         %% WAN Protocols
         P_HDLC[HDLC<br/>ISO 13239<br/>High-Level Data Link Control] --> P_HDLC_FRAME[HDLC Frames<br/>Flag: 0x7E]
-        P_FRAMERELAY[Frame Relay<br/>ANSI T1.618<br/>Packet Switching] --> P_FR_FRAME[Frame Relay Frames<br/>DLCI addressing]
-        P_ATM[ATM\deprecated<br/>ITU-T I.361<br/>Asynchronous Transfer Mode] --> P_ATM_CELL[ATM Cells<br/>53-byte fixed size]
+        P_FRAMERELAY[Frame Relay:::deprecated<br/>ANSI T1.618<br/>Packet Switching] --> P_FR_FRAME[Frame Relay Frames<br/>DLCI addressing]
+        P_ATM[ATM:::deprecated<br/>ITU-T I.361<br/>Asynchronous Transfer Mode] --> P_ATM_CELL[ATM Cells<br/>53-byte fixed size]
         
         %% Wireless Protocols
         P_WIFI[WiFi/WLAN<br/>IEEE 802.11-2020<br/>Wireless LAN] --> P_WIFI_FRAME[802.11 Frames<br/>Multiple frame types]
         P_WIMAX[WiMAX<br/>IEEE 802.16-2017<br/>Broadband Wireless] --> P_WIMAX_FRAME[802.16 Frames<br/>TDD/FDD framing]
         
         %% Legacy and Specialized
-        P_TOKENRING[Token Ring<br/>IEEE 802.5-1998<br/>Token Passing Ring] --> P_TR_FRAME[Token Ring Frames<br/>Starting Delimiter]
-        P_FDDI[FDDI<br/>ANSI X3T9.5<br/>Fiber Distributed Data] --> P_FDDI_FRAME[FDDI Frames<br/>Fiber optic ring]
-        P_ARCNET[ARCnet<br/>ANSI 878.1<br/>Attached Resource Computer] --> P_ARCNET_FRAME[ARCnet Frames<br/>Token bus]
+        P_TOKENRING[Token Ring:::deprecated<br/>IEEE 802.5-1998<br/>Token Passing Ring] --> P_TR_FRAME[Token Ring Frames<br/>Starting Delimiter]
+        P_FDDI[FDDI:::deprecated<br/>ANSI X3T9.5<br/>Fiber Distributed Data] --> P_FDDI_FRAME[FDDI Frames<br/>Fiber optic ring]
+        P_ARCNET[ARCnet:::deprecated<br/>ANSI 878.1<br/>Attached Resource Computer] --> P_ARCNET_FRAME[ARCnet Frames<br/>Token bus]
         
         %% Trunking Protocols
-        P_DTP[DTP<br/>Cisco Proprietary<br/>Dynamic Trunking] --> P_DTP_FRAME[DTP Frames<br/>VLAN negotiation]
-        P_VTP[VTP<br/>Cisco Proprietary<br/>VLAN Trunking] --> P_VTP_FRAME[VTP Frames<br/>VLAN database sync]
-        P_PAGP[PAgP<br/>Cisco Proprietary<br/>Port Aggregation] --> P_PAGP_FRAME[PAgP Frames<br/>EtherType: 0x0104]
+        P_DTP[DTP:::proprietary<br/>Cisco Proprietary<br/>Dynamic Trunking] --> P_DTP_FRAME[DTP Frames<br/>VLAN negotiation]
+        P_VTP[VTP:::proprietary<br/>Cisco Proprietary<br/>VLAN Trunking] --> P_VTP_FRAME[VTP Frames<br/>VLAN database sync]
+        P_PAGP[PAgP:::proprietary<br/>Cisco Proprietary<br/>Port Aggregation] --> P_PAGP_FRAME[PAgP Frames<br/>EtherType: 0x0104]
         
         %% Other Important Protocols
-        P_NDP[NDP<br/>Nortel Discovery<br/>Neighbor Discovery] --> P_NDP_FRAME[NDP Frames<br/>Proprietary format]
-        P_L2F[L2F<br/>RFC 2341<br/>Layer 2 Forwarding] --> P_L2F_FRAME[L2F Frames<br/>Tunneling protocol]
+        P_NDP[NDP:::proprietary<br/>Nortel Discovery<br/>Neighbor Discovery] --> P_NDP_FRAME[NDP Frames<br/>Proprietary format]
+        P_L2F[L2F:::deprecated<br/>RFC 2341<br/>Layer 2 Forwarding] --> P_L2F_FRAME[L2F Frames<br/>Tunneling protocol]
         P_L2TP[L2TP<br/>RFC 2661<br/>Layer 2 Tunneling] --> P_L2TP_FRAME[L2TP Packets<br/>UDP port 1701]
-        P_SLIP[SLIP<br/>RFC 1055<br/>Serial Line IP] --> P_SLIP_FRAME[SLIP Frames<br/>END: 0xC0]
-        P_DCAP[DCAP<br/>RFC 2114<br/>Data Link Switching] --> P_DCAP_FRAME[DCAP Frames<br/>Client Access Protocol]
+        P_SLIP[SLIP:::deprecated<br/>RFC 1055<br/>Serial Line IP] --> P_SLIP_FRAME[SLIP Frames<br/>END: 0xC0]
+        P_DCAP[DCAP:::deprecated<br/>RFC 2114<br/>Data Link Switching] --> P_DCAP_FRAME[DCAP Frames<br/>Client Access Protocol]
     end
+
+    classDef deprecated fill:#ffcccc
+    classDef proprietary fill:#fff3cd
 
         subgraph FRAME_FLOW [Поток обработки кадров]
             direction LR
