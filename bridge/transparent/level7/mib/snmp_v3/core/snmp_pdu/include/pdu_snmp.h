@@ -23,41 +23,41 @@ extern "C"
     extern const uint8_t SNMP_ERR_WRONGENCODING;
     extern const uint8_t SNMP_ERR_WRONGVALUE;
     extern const uint8_t SNMP_ERR_NOCREATION;
-    extern const uint8_t SNMP_ERR_INCONSISTENTVALUE = 12;
-    extern const uint8_t SNMP_ERR_RESOURCEUNAVAILABLE = 13;
-    extern const uint8_t SNMP_ERR_COMMITFAILED = 14;
-    extern const uint8_t SNMP_ERR_UNDOFAILED = 15;
-    extern const uint8_t SNMP_ERR_AUTHORIZATION = 16;
-    extern const uint8_t SNMP_ERR_NOTWRITABLE = 17;
-    extern const uint8_t SNMP_ERR_INCONSISTENTNAME = 18;
+    extern const uint8_t SNMP_ERR_INCONSISTENTVALUE;
+    extern const uint8_t SNMP_ERR_RESOURCEUNAVAILABLE;
+    extern const uint8_t SNMP_ERR_COMMITFAILED;
+    extern const uint8_t SNMP_ERR_UNDOFAILED;
+    extern const uint8_t SNMP_ERR_AUTHORIZATION;
+    extern const uint8_t SNMP_ERR_NOTWRITABLE;
+    extern const uint8_t SNMP_ERR_INCONSISTENTNAME;
 
     // ==================== PDU Types ====================
-    extern const uint8_t SNMP_MSG_GET = 0xA0;
-    extern const uint8_t SNMP_MSG_GETNEXT = 0xA1;
-    extern const uint8_t SNMP_MSG_RESPONSE = 0xA2;
-    extern const uint8_t SNMP_MSG_SET = 0xA3;
-    extern const uint8_t SNMP_MSG_GETBULK = 0xA5;
-    extern const uint8_t SNMP_MSG_INFORM = 0xA6;
-    extern const uint8_t SNMP_MSG_TRAP2 = 0xA7;
-    extern const uint8_t SNMP_MSG_REPORT = 0xA8;
+    extern const uint8_t SNMP_MSG_GET;
+    extern const uint8_t SNMP_MSG_GETNEXT;
+    extern const uint8_t SNMP_MSG_RESPONSE;
+    extern const uint8_t SNMP_MSG_SET;
+    extern const uint8_t SNMP_MSG_GETBULK;
+    extern const uint8_t SNMP_MSG_INFORM;
+    extern const uint8_t SNMP_MSG_TRAP2;
+    extern const uint8_t SNMP_MSG_REPORT;
 
     // ==================== ASN.1 Types ====================
-    extern const uint8_t ASN_BOOLEAN = 0x01;
-    extern const uint8_t ASN_INTEGER = 0x02;
-    extern const uint8_t ASN_BIT_STR = 0x03;
-    extern const uint8_t ASN_OCTET_STR = 0x04;
-    extern const uint8_t ASN_NULL = 0x05;
-    extern const uint8_t ASN_OBJECT_ID = 0x06;
-    extern const uint8_t ASN_SEQUENCE = 0x30;
+    extern const uint8_t ASN_BOOLEAN;
+    extern const uint8_t ASN_INTEGER;
+    extern const uint8_t ASN_BIT_STR;
+    extern const uint8_t ASN_OCTET_STR;
+    extern const uint8_t ASN_NULL;
+    extern const uint8_t ASN_OBJECT_ID;
+    extern const uint8_t ASN_SEQUENCE;
 
     // Application types
-    extern const uint8_t ASN_APPLICATION_MASK = 0x40;
-    extern const uint8_t ASN_IPADDRESS = 0x00 | ASN_APPLICATION_MASK;
-    extern const uint8_t ASN_COUNTER = 0x01 | ASN_APPLICATION_MASK;
-    extern const uint8_t ASN_GAUGE = 0x02 | ASN_APPLICATION_MASK;
-    extern const uint8_t ASN_TIMETICKS = 0x03 | ASN_APPLICATION_MASK;
-    extern const uint8_t ASN_OPAQUE = 0x04 | ASN_APPLICATION_MASK;
-    extern const uint8_t ASN_COUNTER64 = 0x06 | ASN_APPLICATION_MASK;
+    extern const uint8_t ASN_APPLICATION_MASK;
+    extern const uint8_t ASN_IPADDRESS;
+    extern const uint8_t ASN_COUNTER;
+    extern const uint8_t ASN_GAUGE;
+    extern const uint8_t ASN_TIMETICKS;
+    extern const uint8_t ASN_OPAQUE;
+    extern const uint8_t ASN_COUNTER64;
 
     // ==================== Structures ====================
     typedef uint32_t oid;
