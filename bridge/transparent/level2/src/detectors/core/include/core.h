@@ -24,7 +24,7 @@
 #include <pthread.h>
 #include <sys/stat.h>
 
-#include "/mnt/c/Users/dmako/kryosette/kryosette-servers/bridge/transparent/src/ethernet/fdb/core/cam_table/include/cam_table_operations.h"
+#include "/home/dima853/kryosette-servers/bridge/transparent/level2/src/ethernet/fdb/core/cam_table/include/cam_table_operations.h"
 
 // ===== GLOBAL VARIABLES =====
 extern volatile sig_atomic_t stop_monitoring;

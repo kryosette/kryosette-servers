@@ -1,4 +1,4 @@
-#include "/mnt/c/Users/dmako/kryosette/kryosette-servers/bridge/transparent/src/detectors/core/include/core.h"
+#include "/home/dima853/kryosette-servers/bridge/transparent/level2/src/detectors/core/include/core.h"
 
 // ===== GLOBAL VARIABLES =====
 volatile sig_atomic_t stop_monitoring = 0;
@@ -16,7 +16,7 @@ volatile sig_atomic_t stop_monitoring = 0;
 static int create_cam_directory()
 {
     struct stat st = {0};
-    static const char *primary_path = "/mnt/c/Users/dmako/kryosette/kryosette-servers/bridge/var/lib/cam-table";
+    static const char *primary_path = "/var/lib/cam-table";
     static const char *fallback_path = "/tmp/cam-table";
 
     if (stat(primary_path, &st) == 0)
@@ -110,7 +110,7 @@ static int init_cam_file(const char *filename, uint32_t capacity)
  */
 void print_cam_table()
 {
-    const char *filename = "/mnt/c/Users/dmako/kryosette/kryosette-servers/bridge/var/lib/cam-table/cam.bin";
+    const char *filename = "/var/lib/cam-table/cam.bin";
 
     printf("\n→ READING CAM TABLE: %s\n", filename);
 
@@ -204,7 +204,7 @@ int cam_table_init(cam_table_manager_t *manager, uft_mode_t default_mode)
         return -1;
     }
 
-    const char *filename = "/mnt/c/Users/dmako/kryosette/kryosette-servers/bridge/var/lib/cam-table/cam.bin";
+    const char *filename = "/var/lib/cam-table/cam.bin";
     FILE *test_file = fopen(filename, "rb");
     if (!test_file)
     {
@@ -266,7 +266,7 @@ int cam_table_cleanup(cam_table_manager_t *manager)
  */
 int is_mac_blocked(const uint8_t *mac_bytes)
 {
-    const char *filename = "/mnt/c/Users/dmako/kryosette/kryosette-servers/bridge/var/lib/cam-table/cam.bin";
+    const char *filename = "/var/lib/cam-table/cam.bin";
     FILE *file = fopen(filename, "rb");
     if (!file)
         return 0; // If file doesn't exist, MAC is not blocked
@@ -324,7 +324,7 @@ int cam_table_block_mac(cam_table_manager_t *manager, const uint8_t *mac_bytes, 
         return 0;
     }
 
-    const char *filename = "/mnt/c/Users/dmako/kryosette/kryosette-servers/bridge/var/lib/cam-table/cam.bin";
+    const char *filename = "/var/lib/cam-table/cam.bin";
     FILE *file = fopen(filename, "r+b");
     if (!file)
     {
@@ -394,7 +394,7 @@ int cam_table_unblock_mac(cam_table_manager_t *manager, const uint8_t *mac_bytes
     if (!manager || !manager->initialized)
         return -1;
 
-    const char *filename = "/mnt/c/Users/dmako/kryosette/kryosette-servers/bridge/var/lib/cam-table/cam.bin";
+    const char *filename = "/var/lib/cam-table/cam.bin";
     FILE *file = fopen(filename, "r+b");
     if (!file)
         return -1;
@@ -458,7 +458,7 @@ int cam_table_set_mac_pending(cam_table_manager_t *manager, const uint8_t *mac_b
     if (!manager || !manager->initialized)
         return -1;
 
-    const char *filename = "/mnt/c/Users/dmako/kryosette/kryosette-servers/bridge/var/lib/cam-table/cam.bin";
+    const char *filename = "/var/lib/cam-table/cam.bin";
     FILE *file = fopen(filename, "r+b");
     if (!file)
         return -1;
