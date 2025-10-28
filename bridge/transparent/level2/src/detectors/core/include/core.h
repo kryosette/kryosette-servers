@@ -2,27 +2,53 @@
 #ifndef CORE_H
 #define CORE_H
 
+#define _GNU_SOURCE
+#define __USE_MISC
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
 #include <time.h>
+#include <signal.h>
+#include <errno.h>
+#include <pthread.h>
+#include <sys/stat.h>
+
+#include <sys/types.h>
 #include <sys/socket.h>
 #include <sys/ioctl.h>
 #include <fcntl.h>
+
+#include <netdb.h>
+
 #include <netinet/in.h>
 #include <netinet/ip.h>
 #include <netinet/tcp.h>
 #include <netinet/udp.h>
 #include <netinet/if_ether.h>
-#include <net/if.h>
+
+#include <net/if.h>   
 #include <net/ethernet.h>
 #include <arpa/inet.h>
+
 #include <linux/if_packet.h>
-#include <signal.h>
-#include <errno.h>
-#include <pthread.h>
-#include <sys/stat.h>
+#include <linux/if_ether.h>
+
+#ifdef __linux__
+#include <sys/file.h> 
+#else
+#include <sys/fcntl.h> 
+#endif
+
+#include <time.h>
+
+static inline void msleep(int milliseconds) {
+    struct timespec ts;
+    ts.tv_sec = milliseconds / 1000;
+    ts.tv_nsec = (milliseconds % 1000) * 1000000;
+    nanosleep(&ts, NULL);
+}
 
 #include "/home/dima853/kryosette-servers/bridge/transparent/level2/src/ethernet/fdb/core/cam_table/include/cam_table_operations.h"
 
