@@ -23,6 +23,26 @@
 #include <time.h>
 #include "atomic_shim.h"
 
+#include <unistd.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+#include <fcntl.h>
+#include <errno.h>
+#include <time.h>
+#include <pthread.h>
+
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <netinet/ip.h>
+#include <netinet/tcp.h>
+#include <netinet/udp.h>
+#include <netinet/if_ether.h>
+#include <net/if.h>
+#include <arpa/inet.h>
+#include <sys/ioctl.h>
+
 #ifdef __cplusplus
 extern "C"
 {
@@ -140,6 +160,12 @@ extern "C"
 #define SFENCE() __asm__ __volatile__("" ::: "memory") /**< Compiler barrier */
 #define LFENCE() __asm__ __volatile__("" ::: "memory") /**< Compiler barrier */
 #warning "Using compiler memory barrier only - architecture not specifically optimized"
+#endif
+
+#ifdef __linux__
+#include <sys/file.h>   
+#else
+#include <sys/fcntl.h>  
 #endif
 
     /* ===== Cross-Platform System Calls ===== */
@@ -705,6 +731,8 @@ extern "C"
         bool initialized;           /**< System initialization flag */
         bool hardware_sync_enabled; /**< Hardware synchronization enabled */
         uint32_t magic_number;      /**< Magic number for validation */
+
+        pthread_rwlock_t rwlock; /**< Reader-Writer Lock */
     } cam_table_manager_t;
 
     /* ===== API Function Declarations ===== */

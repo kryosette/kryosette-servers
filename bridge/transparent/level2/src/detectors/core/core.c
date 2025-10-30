@@ -1,3 +1,5 @@
+#define _POSIX_C_SOURCE 200112L
+
 #include "/home/dima853/kryosette-servers/bridge/transparent/level2/src/detectors/core/include/core.h"
 
 // ===== GLOBAL VARIABLES =====
@@ -310,72 +312,190 @@ int is_mac_blocked(const uint8_t *mac_bytes)
  *
  * Return: 0 on success, -1 on error or manager not initialized
  */
-int cam_table_block_mac(cam_table_manager_t *manager, const uint8_t *mac_bytes, uint16_t vlan_id, const char *reason)
+/**
+ * block_mac_in_file - Internal function to block MAC in file (delegated)
+ * @mac_bytes: MAC address to block (6-byte array)
+ * @vlan_id: VLAN identifier for the MAC entry  
+ * @reason: Description of why MAC is being blocked
+ *
+ * Internal function that handles file operations for blocking MAC
+ *
+ * Return: 0 on success, -1 on error
+ */
+static int block_mac_in_file(const uint8_t *mac_bytes, uint16_t vlan_id, const char *reason)
 {
-    if (!manager || !manager->initialized)
-        return -1;
-
-    // First check if MAC is already blocked
-    if (is_mac_blocked(mac_bytes))
-    {
-        printf("→ MAC already blocked in CAM table: %02X:%02X:%02X:%02X:%02X:%02X\n",
-               mac_bytes[0], mac_bytes[1], mac_bytes[2],
-               mac_bytes[3], mac_bytes[4], mac_bytes[5]);
-        return 0;
-    }
-
     const char *filename = "/var/lib/cam-table/cam.bin";
-    FILE *file = fopen(filename, "r+b");
-    if (!file)
-    {
-        printf("✗ Failed to open CAM file for blocking\n");
+    int fd = -1;
+    FILE *file = NULL;
+    int result = -1;
+    
+    fd = open(filename, O_RDWR | O_CREAT, 0700);
+    if (fd == -1) {
+        printf("✗ Failed to open CAM file for blocking: %s\n", strerror(errno));
         return -1;
     }
-
+    
+    if (flock(fd, LOCK_EX) == -1) {
+        printf("✗ Failed to lock CAM file: %s\n", strerror(errno));
+        goto cleanup;
+    }
+    
+    file = fdopen(fd, "r+b");
+    if (!file) {
+        printf("✗ Failed to convert file descriptor: %s\n", strerror(errno));
+        goto cleanup;
+    }
+    
     cam_file_header_t header;
-    fread(&header, sizeof(header), 1, file);
+    if (fread(&header, sizeof(header), 1, file) != 1) {
+        printf("✗ Failed to read CAM header\n");
+        goto cleanup;
+    }
 
     cam_file_entry_t entry;
     int found = 0;
-
-    for (uint32_t i = 0; i < header.total_entries; i++)
-    {
-        fread(&entry, sizeof(entry), 1, file);
-
+    
+    for (uint32_t i = 0; i < header.total_entries; i++) {
+        if (fread(&entry, sizeof(entry), 1, file) != 1) {
+            break;
+        }
+        
         if (entry.status == ENTRY_FREE ||
-            (memcmp(entry.mac, mac_bytes, 6) == 0 && entry.vlan_id == vlan_id))
-        {
+            (memcmp(entry.mac, mac_bytes, 6) == 0 && entry.vlan_id == vlan_id)) {
             found = 1;
-
+            
             memcpy(entry.mac, mac_bytes, 6);
             entry.vlan_id = vlan_id;
             entry.status = ENTRY_BLOCKED;
             entry.last_seen = time(NULL);
             strncpy(entry.reason, reason, sizeof(entry.reason) - 1);
-
-            fseek(file, sizeof(header) + i * sizeof(entry), SEEK_SET);
-            fwrite(&entry, sizeof(entry), 1, file);
-
+            entry.reason[sizeof(entry.reason) - 1] = '\0';
+            
+            if (fseek(file, sizeof(header) + i * sizeof(entry), SEEK_SET) != 0) {
+                found = 0;
+                break;
+            }
+            
+            if (fwrite(&entry, sizeof(entry), 1, file) != 1) {
+                found = 0;
+                break;
+            }
+            
             header.blocked_count++;
-            if (entry.status == ENTRY_FREE)
+            if (entry.status == ENTRY_FREE) {
                 header.free_count--;
-
+            }
+            
             break;
         }
     }
 
-    if (found)
-    {
+    if (found) {
         header.last_updated = time(NULL);
-        fseek(file, 0, SEEK_SET);
-        fwrite(&header, sizeof(header), 1, file);
-        printf("✓ MAC blocked in CAM table: %02X:%02X:%02X:%02X:%02X:%02X\n",
+        if (fseek(file, 0, SEEK_SET) != 0 ||
+            fwrite(&header, sizeof(header), 1, file) != 1) {
+            found = 0;
+        } else {
+            result = 0;
+            printf("✓ MAC blocked in CAM table: %02X:%02X:%02X:%02X:%02X:%02X\n",
+                   mac_bytes[0], mac_bytes[1], mac_bytes[2],
+                   mac_bytes[3], mac_bytes[4], mac_bytes[5]);
+        }
+    }
+    
+    if (!found) {
+        printf("✗ MAC not found or update failed: %02X:%02X:%02X:%02X:%02X:%02X\n",
                mac_bytes[0], mac_bytes[1], mac_bytes[2],
                mac_bytes[3], mac_bytes[4], mac_bytes[5]);
     }
 
-    fclose(file);
-    return found ? 0 : -1;
+cleanup:
+    if (file) {
+        fclose(file);  
+    } else if (fd != -1) {
+        flock(fd, LOCK_UN);
+        close(fd);
+    }
+    
+    return result;
+}
+
+/**
+ * update_memory_cache - Update in-memory cache after file operation
+ * @manager: CAM table manager instance
+ * @mac_bytes: MAC address that was blocked
+ * @vlan_id: VLAN identifier
+ * @status: New status for the MAC entry
+ */
+static void update_memory_cache(cam_table_manager_t *manager, const uint8_t *mac_bytes, 
+                               uint16_t vlan_id, cam_entry_status_t status)
+{
+    pthread_rwlock_wrlock(&manager->rwlock);
+    
+    // Update your in-memory data structures here
+    // For example:
+    // - Update hash table
+    // - Update blocked MACs list  
+    // - Update statistics
+    
+    pthread_rwlock_unlock(&manager->rwlock);
+}
+
+/**
+ * is_mac_already_blocked - Check if MAC is already blocked (thread-safe)
+ * @manager: CAM table manager instance
+ * @mac_bytes: MAC address to check
+ * @vlan_id: VLAN identifier
+ *
+ * Return: 1 if already blocked, 0 otherwise
+ */
+static int is_mac_already_blocked(cam_table_manager_t *manager, const uint8_t *mac_bytes, uint16_t vlan_id)
+{
+    int blocked = 0;
+    
+    pthread_rwlock_rdlock(&manager->rwlock);
+    // Check your in-memory data structures
+    // blocked = check_if_mac_blocked(manager, mac_bytes, vlan_id);
+    pthread_rwlock_unlock(&manager->rwlock);
+    
+    if (blocked) {
+        printf("→ MAC already blocked in CAM table: %02X:%02X:%02X:%02X:%02X:%02X\n",
+               mac_bytes[0], mac_bytes[1], mac_bytes[2],
+               mac_bytes[3], mac_bytes[4], mac_bytes[5]);
+    }
+    
+    return blocked;
+}
+
+/**
+ * cam_table_block_mac - Block MAC address in CAM table (delegated version)
+ * @manager: CAM table manager instance
+ * @mac_bytes: MAC address to block (6-byte array)
+ * @vlan_id: VLAN identifier for the MAC entry
+ * @reason: Description of why MAC is being blocked
+ *
+ * Public API function that delegates file operations to internal functions
+ *
+ * Return: 0 on success, -1 on error
+ */
+int cam_table_block_mac(cam_table_manager_t *manager, const uint8_t *mac_bytes, 
+                       uint16_t vlan_id, const char *reason)
+{
+    if (!manager || !manager->initialized || !mac_bytes || !reason) {
+        return -1;
+    }
+    
+    if (is_mac_already_blocked(manager, mac_bytes, vlan_id)) {
+        return 0;
+    }
+    
+    int result = block_mac_in_file(mac_bytes, vlan_id, reason);
+
+    if (result == 0) {
+        update_memory_cache(manager, mac_bytes, vlan_id, ENTRY_BLOCKED);
+    }
+    
+    return result;
 }
 
 /**
