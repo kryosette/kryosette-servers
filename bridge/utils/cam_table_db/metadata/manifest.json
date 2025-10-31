@@ -1,0 +1,34 @@
+{
+    "levels": [
+        {
+            "level": 0,
+            "sstables": [
+                {
+                    "file": "sstable_0001.sst",
+                    "min_key": "00:1A:...",
+                    "max_key": "FF:...",
+                    "size": 1048576
+                },
+                {
+                    "file": "sstable_0002.sst",
+                    "min_key": "00:1B:...",
+                    "max_key": "FE:...",
+                    "size": 1048576
+                }
+            ]
+        },
+        {
+            "level": 1,
+            "sstables": [
+                {
+                    "file": "sstable_1001.sst",
+                    "min_key": "00:0A:...",
+                    "max_key": "FF:...",
+                    "size": 4194304
+                }
+            ]
+        }
+    ],
+    "next_sstable_id": 1002,
+    "version": 1
+}
