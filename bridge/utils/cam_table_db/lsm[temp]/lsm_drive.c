@@ -28,7 +28,7 @@ void init_lsm_tree(LSMTree *tree)
     //     overflows by ensuring that no more than a specified number of characters
     //     are written to the destination buffer.
     //     */
-    //     snprintf(tree->sstables[i].filename, sizeoдаyf(tree->sstables[i].filename), "sstable%d.txt", i);
+    //     snprintf(tree->sstables[i].filename, sizeof(tree->sstables[i].filename), "sstable%d.txt", i);
     // }
 
     printf("LSM-tree initialized with memtable capacity %d\n", MEMTABLE_SIZE);
