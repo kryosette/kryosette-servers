@@ -128,7 +128,7 @@ void lsm_put(LSMTree *tree, const char *key, const char *value)
     KeyValuePair new_pair;
 
     /*
-    char *strncpy(char *dest, const char *src, size_t n);
+        char *strncpy(char *dest, const char *src, size_t n);
     */
     strncpy(new_pair.key, key, KEY_SIZE - 1);
     new_pair.key[KEY_SIZE - 1] = '\0'; // safe
@@ -241,11 +241,11 @@ void load_sstable_from_disk(SSTable *sstable, const char *filename)
     fread(&sstable->size, sizeof(int), 1, file);
 
     /*
-    void *malloc(size_t size);
-       void free(void *_Nullable ptr);
-       void *calloc(size_t n, size_t size);
-       void *realloc(void *_Nullable ptr, size_t size);
-       void *reallocarray(void *_Nullable ptr, size_t n, size_t size);
+        void *malloc(size_t size);
+        void free(void *_Nullable ptr);
+        void *calloc(size_t n, size_t size);
+        void *realloc(void *_Nullable ptr, size_t size);
+        void *reallocarray(void *_Nullable ptr, size_t n, size_t size);
     */
     sstable->pairs = malloc(sstable->size * sizeof(KeyValuePair));
     if (!sstable->pairs)
@@ -254,7 +254,7 @@ void load_sstable_from_disk(SSTable *sstable, const char *filename)
         exit(EXIT_FAILURE);
     }
 
-    //  sstable->size - quatity
+    // stable->size - quatity
     fread(sstable->pairs, sizeof(KeyValuePair), sstable->size, file);
 
     strncpy(sstable->filename, filename, sizeof(sstable->filename) - 1);
