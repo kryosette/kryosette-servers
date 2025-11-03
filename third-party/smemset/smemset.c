@@ -43,7 +43,7 @@
  *          may have different performance characteristics.
  * @see memset() for standard memory setting function
  */
-#include "../include/smemset.h"
+#include "/mnt/c/Users/dmako/kryosette/kryosette-servers/third-party/smemset/include/smemset.h"
 #include <stdint.h>
 
 typedef unsigned char byte;

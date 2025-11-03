@@ -3,6 +3,7 @@
 #include <string.h>
 #include "/mnt/c/Users/dmako/kryosette/kryosette-servers/third-party/smemset/include/smemset.h"
 #include <stdio.h>
+
 /*
 ART is a prefix tree (radix tree) that:
 
