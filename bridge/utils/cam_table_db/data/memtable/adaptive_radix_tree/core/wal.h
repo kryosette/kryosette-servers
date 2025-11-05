@@ -45,5 +45,3 @@ void wal_close(wal_t* wal);
 char* wal_find_latest(const char* base_filename);
 
 int wal_recover(const char* base_filename, wal_apply_func_t apply_func, void* user_data);
-
-#endif
