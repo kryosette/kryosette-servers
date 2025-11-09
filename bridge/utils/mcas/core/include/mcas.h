@@ -10,7 +10,7 @@ static inline bool CAS(int *ptr, int expected, int new_val)
     return atomic_compare_exchange_strong((atomic_int *)ptr, &expected, new_val);
 }
 
-/* initialy: exist CAS2 (which acts on two arbitrary memory locations) *https://en.wikipedia.org/wiki/Double_compare-and-swap
+/* initialy: exist CAS2 (which acts on two arbitrary memory locations) *https://en.wikipedia.org/wiki/wiki/Double_compare-and-swap
 work: DCAS takes two not necessarily **contiguous** memory locations and writes new values into them only if they match pre-supplied "expected" values;
 as such, it is an extension of the much more popular compare-and-swap (CAS) operation.
 
@@ -59,3 +59,23 @@ typedef struct
 bool CASN(CASN_Descriptor *desc);
 
 bool MCAS(CASN_Descriptor *desc);
+
+// ==================== Ephemeral Hash CAS for MCAS ====================
+
+typedef struct
+{
+    _Atomic(uint64_t) *addr;
+    uint64_t expected;
+    uint64_t new_val;
+} MCAS_EHashOperation;
+
+typedef struct
+{
+    MCAS_EHashOperation *operations;
+    int count;
+    _Atomic(uint32_t) status;
+    HashGenerator hash_gen;
+} MCAS_EHashDescriptor;
+
+// Multi-CAS using Ephemeral Hash
+bool MCAS_ehash(MCAS_EHashDescriptor *desc);
