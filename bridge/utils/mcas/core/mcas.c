@@ -3,6 +3,8 @@
 #include <stdlib.h>
 #include <stdio.h>
 
+// ==================== CAS2 with Ephemeral Hash ====================
+
 bool CAS2_ehash(int *addr1, int expected1, int new_val1,
                 int *addr2, int expected2, int new_val2)
 {
@@ -51,6 +53,8 @@ bool CAS2_ehash(int *addr1, int expected1, int new_val1,
     return success;
 }
 
+// ==================== CASN Implementation ====================
+
 bool CASN(CASN_Descriptor *desc)
 {
     atomic_store(&desc->status, 0); // pending
@@ -92,4 +96,138 @@ bool CASN(CASN_Descriptor *desc)
 bool MCAS(CASN_Descriptor *desc)
 {
     return CASN(desc);
+}
+
+// ==================== Ephemeral Hash MCAS Implementation ====================
+
+bool MCAS_ehash(MCAS_EHashDescriptor *desc)
+{
+    // Initialize status to pending
+    atomic_store(&desc->status, 0);
+
+    // Try to acquire all locations by replacing them with our descriptor pointer
+    for (int i = 0; i < desc->count; i++)
+    {
+        MCAS_EHashOperation *op = &desc->operations[i];
+        EHashPtr expected = ehash_from_uint64(op->expected);
+        EHashPtr new_val = make_ehash_ptr(desc, hash_generator_next(&desc->hash_gen));
+
+        while (true)
+        {
+            EHashPtr current = EHash_load(op->addr);
+
+            // If we see our own descriptor, help complete the operation
+            if (ehash_get_ptr(current) == desc)
+            {
+                break;
+            }
+
+            // If we see another descriptor, help complete it first
+            if (ehash_get_ptr(current) != NULL && ehash_get_ptr(current) != (void *)op->expected)
+            {
+                MCAS_EHashDescriptor *other_desc = (MCAS_EHashDescriptor *)ehash_get_ptr(current);
+
+                // Help complete the other operation
+                if (atomic_load(&other_desc->status) == 0)
+                {
+                    for (int j = 0; j < other_desc->count; j++)
+                    {
+                        MCAS_EHashOperation *other_op = &other_desc->operations[j];
+                        if (atomic_load(&other_desc->status) == 0)
+                        {
+                            EHash_CAS(other_op->addr,
+                                      make_ehash_ptr(other_desc, current.hash),
+                                      ehash_from_uint64(other_op->new_val));
+                        }
+                    }
+                    atomic_store(&other_desc->status, 1);
+                }
+                continue;
+            }
+
+            // Try to install our descriptor
+            if (EHash_CAS(op->addr, expected, new_val))
+            {
+                break;
+            }
+
+            // CAS failed, reload expected value
+            expected = ehash_from_uint64(op->expected);
+        }
+    }
+
+    // All locations acquired, now perform the actual updates
+    bool success = true;
+    for (int i = 0; i < desc->count; i++)
+    {
+        MCAS_EHashOperation *op = &desc->operations[i];
+
+        // For the actual update, we need to be more careful
+        // We'll use the fact that we own these locations now
+        EHashPtr current = EHash_load(op->addr);
+        if (ehash_get_ptr(current) != desc)
+        {
+            success = false;
+            break;
+        }
+
+        EHashPtr new_val_ehash = ehash_from_uint64(op->new_val);
+        if (!EHash_CAS(op->addr, current, new_val_ehash))
+        {
+            success = false;
+            break;
+        }
+    }
+
+    // Update status
+    atomic_store(&desc->status, success ? 1 : 2);
+
+    // Cleanup: restore original values on failure
+    if (!success)
+    {
+        for (int i = 0; i < desc->count; i++)
+        {
+            MCAS_EHashOperation *op = &desc->operations[i];
+            EHashPtr current = EHash_load(op->addr);
+            if (ehash_get_ptr(current) == desc)
+            {
+                EHashPtr original = ehash_from_uint64(op->expected);
+                EHash_CAS(op->addr, current, original);
+            }
+        }
+    }
+
+    return success;
+}
+
+// ==================== Utility Functions ====================
+
+MCAS_EHashDescriptor *MCAS_ehash_create_descriptor(int count, uint64_t seed)
+{
+    MCAS_EHashDescriptor *desc = malloc(sizeof(MCAS_EHashDescriptor));
+    desc->operations = malloc(sizeof(MCAS_EHashOperation) * count);
+    desc->count = count;
+    atomic_store(&desc->status, 0);
+    hash_generator_init(&desc->hash_gen, seed);
+    return desc;
+}
+
+void MCAS_ehash_free_descriptor(MCAS_EHashDescriptor *desc)
+{
+    if (desc)
+    {
+        free(desc->operations);
+        free(desc);
+    }
+}
+
+void MCAS_ehash_set_operation(MCAS_EHashDescriptor *desc, int index,
+                              _Atomic(uint64_t) *addr, uint64_t expected, uint64_t new_val)
+{
+    if (index < desc->count)
+    {
+        desc->operations[index].addr = addr;
+        desc->operations[index].expected = expected;
+        desc->operations[index].new_val = new_val;
+    }
 }
