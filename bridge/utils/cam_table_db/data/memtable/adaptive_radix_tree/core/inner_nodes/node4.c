@@ -137,7 +137,7 @@ int node4_add_child(node4 *node, uint8_t key_byte, art_node *child)
     }
 }
 
-int node4_add_child_optimized(node4 *node, uint8_t key_byte, art_node *child)
+int node4_add_child(node4 *node, uint8_t key_byte, art_node *child)
 {
     if (!node || !child)
     {
