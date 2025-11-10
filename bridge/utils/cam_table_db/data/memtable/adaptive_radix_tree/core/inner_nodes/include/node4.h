@@ -1,5 +1,6 @@
 #pragma once
 
+#include <stdatomic.h>
 #include "inner_node_common.h"
 
 #define LEAF_NODE 255
@@ -8,7 +9,7 @@ typedef struct node4
 {
     inner_node_header header;
     uint8_t keys[4];
-    art_node *children[4];
+    _Atomic(art_node *) *children[4];
 } node4;
 
 typedef struct leaf_node

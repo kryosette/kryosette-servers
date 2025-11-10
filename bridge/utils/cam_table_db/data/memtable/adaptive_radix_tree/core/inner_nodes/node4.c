@@ -23,7 +23,7 @@ inner_node node4_create()
     }
 
     node->header.type = NODE4;
-    node->header.count = 0;
+    atomic_store(&node->header.count, 0);
     node->header.prefix_len = 0;
     smemset(node->keys, 0, 4);
     /*
@@ -32,7 +32,10 @@ inner_node node4_create()
         node->children[i] = NULL;
     }
     */
-    smemset(node->children, 0, 4 * sizeof(art_node *)); // zeroing out
+    for (int i = 0; i < 4; i++)
+    {
+        atomic_store(&node->children[i], NULL);
+    } // zeroing out
     return (inner_node)node;
 }
 
@@ -48,11 +51,13 @@ art_node *node4_find_child(node4 *node, uint8_t key_byte)
         return NULL;
     }
 
-    for (int i = 0; i < node->header.count; i++)
+    int count = atomic_load(&node->header.count);
+
+    for (int i = 0; i < count; i++)
     {
         if (node->keys[i] == key_byte)
         {
-            return node->children[i];
+            return atomic_load(&node->children[i]);
         }
     }
 
@@ -84,82 +89,101 @@ int node4_add_child(node4 *node, uint8_t key_byte, art_node *child)
         return -1;
     }
 
-    if (node->header.count >= 4)
+    while (true)
     {
-        return -2;
-    }
+        int current_count = atomic_load(&node->header.count);
 
-    for (int i = 0; i < node->header.count; i++)
-    {
-        if (node->keys[i] == key_byte)
+        if (current_count >= 4)
         {
-            return -3;
+            return -2; // Нужно увеличить размер узла
+        }
+
+        for (int i = 0; i < current_count; i++)
+        {
+            if (node->keys[i] == key_byte)
+            {
+                return -3;
+            }
+        }
+
+        int insert_pos = 0;
+        while (insert_pos < current_count && node->keys[insert_pos] < key_byte)
+        {
+            insert_pos++;
+        }
+
+        MCAS_EHashDescriptor *desc = MCAS_ehash_create_descriptor(3, (uint64_t)node);
+
+        MCAS_ehash_set_operation(desc, 0,
+                                 (_Atomic(uint64_t) *)&node->header.count,
+                                 current_count, current_count + 1);
+
+        MCAS_ehash_set_operation(desc, 1,
+                                 (_Atomic(uint64_t) *)&node->keys[insert_pos],
+                                 node->keys[insert_pos], key_byte);
+
+        MCAS_ehash_set_operation(desc, 2,
+                                 (_Atomic(uint64_t) *)&node->children[insert_pos],
+                                 (uint64_t)atomic_load(&node->children[insert_pos]),
+                                 (uint64_t)child);
+
+        bool success = MCAS_ehash(desc);
+        MCAS_ehash_free_descriptor(desc);
+
+        if (success)
+        {
+            return 0;
         }
     }
-
-    // Find insertion position to maintain sorted order
-    int insert_pos = 0;
-    while (insert_pos < node->header.count && node->keys[insert_pos] < key_byte)
-    {
-        insert_pos++;
-    }
-
-    // Shift existing elements to make space
-    for (int i = node->header.count; i > insert_pos; i--)
-    {
-        node->keys[i] = node->keys[i - 1];
-        node->children[i] = node->children[i - 1];
-    }
-
-    // Insert new key and child
-    node->keys[insert_pos] = key_byte;
-    node->children[insert_pos] = child;
-    node->header.count++;
-
-    return 0;
 }
 
-int node4_remove_child(node4 *node, uint8_t key_byte)
+int node4_add_child_optimized(node4 *node, uint8_t key_byte, art_node *child)
 {
-    if (!node)
+    if (!node || !child)
     {
         return -1;
     }
 
-    if (node->header.count == 0)
+    while (true)
     {
-        return -2;
-    }
+        int current_count = atomic_load(&node->header.count);
 
-    // Find the key to remove
-    int remove_pos = -1;
-    for (int i = 0; i < node->header.count; i++)
-    {
-        if (node->keys[i] == key_byte)
+        if (current_count >= 4)
         {
-            remove_pos = i;
-            break;
+            return -2;
         }
+
+        for (int i = 0; i < current_count; i++)
+        {
+            if (node->keys[i] == key_byte)
+            {
+                return -3;
+            }
+        }
+
+        int insert_pos = 0;
+        while (insert_pos < current_count && node->keys[insert_pos] < key_byte)
+        {
+            insert_pos++;
+        }
+
+        if (!CAS(&node->header.count, current_count, current_count + 1))
+        {
+            continue;
+        }
+
+        for (int i = current_count; i > insert_pos; i--)
+        {
+            node->keys[i] = node->keys[i - 1];
+            art_node *old_child = atomic_exchange(&node->children[i],
+                                                  atomic_load(&node->children[i - 1]));
+        }
+
+        node->keys[insert_pos] = key_byte;
+        atomic_store(&node->children[insert_pos], child);
+
+        return 0;
     }
-
-    if (remove_pos == -1)
-    {
-        return -3;
-    }
-
-    // Shift elements to fill the gap
-    for (int i = remove_pos; i < node->header.count - 1; i++)
-    {
-        node->keys[i] = node->keys[i + 1];
-        node->children[i] = node->children[i + 1];
-    }
-
-    // Clear the last element
-    node->keys[node->header.count - 1] = 0;
-    node->children[node->header.count - 1] = NULL;
-    node->header.count--;
-
-    return 0;
 }
 
 // inner_node node4_grow_to_16(node4 *node)
