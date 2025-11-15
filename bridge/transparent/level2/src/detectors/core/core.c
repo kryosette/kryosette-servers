@@ -1,6 +1,8 @@
 #define _POSIX_C_SOURCE 200112L
 
 #include "/home/dima853/kryosette-servers/bridge/transparent/level2/src/detectors/core/include/core.h"
+#include "constants.h"
+#include "redis_manager.h"
 
 // ===== GLOBAL VARIABLES =====
 volatile sig_atomic_t stop_monitoring = 0;
@@ -18,43 +20,57 @@ volatile sig_atomic_t stop_monitoring = 0;
 static int create_cam_directory()
 {
     struct stat st = {0};
-    static const char *primary_path = "/var/lib/cam-table";
-    static const char *fallback_path = "/tmp/cam-table";
+    const char *primary_path = get_cam_table_primary_path();
+    const char *fallback_path = get_cam_table_fallback_path();
 
-    if (stat(primary_path, &st) == 0)
+    // Extract directory from full path
+    char primary_dir[256] = {0};
+    char fallback_dir[256] = {0};
+    strncpy(primary_dir, primary_path, sizeof(primary_dir) - 1);
+    strncpy(fallback_dir, fallback_path, sizeof(fallback_dir) - 1);
+
+    char *primary_slash = strrchr(primary_dir, '/');
+    char *fallback_slash = strrchr(fallback_dir, '/');
+
+    if (primary_slash)
+        *primary_slash = '\0';
+    if (fallback_slash)
+        *fallback_slash = '\0';
+
+    if (stat(primary_dir, &st) == 0)
     {
         if (S_ISDIR(st.st_mode))
             return 0;
         else
         {
-            fprintf(stderr, "Error: %s exists but is not a directory\n", primary_path);
+            fprintf(stderr, "Error: %s exists but is not a directory\n", primary_dir);
             return -1;
         }
     }
 
-    if (mkdir(primary_path, 0700) == 0)
+    if (mkdir(primary_dir, 0700) == 0)
         return 0;
 
     if (errno != EACCES)
-        fprintf(stderr, "mkdir(%s) failed: %s\n", primary_path, strerror(errno));
+        fprintf(stderr, "mkdir(%s) failed: %s\n", primary_dir, strerror(errno));
 
-    if (stat(fallback_path, &st) == 0)
+    if (stat(fallback_dir, &st) == 0)
     {
         if (S_ISDIR(st.st_mode))
         {
-            printf("Using existing fallback: %s\n", fallback_path);
+            printf("Using existing fallback: %s\n", fallback_dir);
             return 0;
         }
         else
         {
-            fprintf(stderr, "Error: %s exists but is not a directory\n", fallback_path);
+            fprintf(stderr, "Error: %s exists but is not a directory\n", fallback_dir);
             return -1;
         }
     }
 
-    if (mkdir(fallback_path, 0700) == 0)
+    if (mkdir(fallback_dir, 0700) == 0)
     {
-        printf("Created fallback directory: %s\n", fallback_path);
+        printf("Created fallback directory: %s\n", fallback_dir);
         return 0;
     }
 
@@ -112,7 +128,7 @@ static int init_cam_file(const char *filename, uint32_t capacity)
  */
 void print_cam_table()
 {
-    const char *filename = "/var/lib/cam-table/cam.bin";
+    const char *filename = get_cam_table_primary_path();
 
     printf("\n→ READING CAM TABLE: %s\n", filename);
 
@@ -206,12 +222,12 @@ int cam_table_init(cam_table_manager_t *manager, uft_mode_t default_mode)
         return -1;
     }
 
-    const char *filename = "/var/lib/cam-table/cam.bin";
+    const char *filename = get_cam_table_primary_path();
     FILE *test_file = fopen(filename, "rb");
     if (!test_file)
     {
         printf("→ Creating new CAM table: %s\n", filename);
-        if (init_cam_file(filename, DEFAULT_CAPACITY) != 0)
+        if (init_cam_file(filename, get_default_cam_capacity()) != 0)
         {
             printf("✗ Error creating CAM file\n");
             return -1;
@@ -231,7 +247,7 @@ int cam_table_init(cam_table_manager_t *manager, uft_mode_t default_mode)
     manager->initialized = true;
 
     printf("✓ CAM table initialized: %s\n", filename);
-    printf("   Mode: %d, Capacity: %d entries\n", default_mode, DEFAULT_CAPACITY);
+    printf("   Mode: %d, Capacity: %d entries\n", default_mode, get_default_cam_capacity());
     return 0;
 }
 
@@ -268,7 +284,7 @@ int cam_table_cleanup(cam_table_manager_t *manager)
  */
 int is_mac_blocked(const uint8_t *mac_bytes)
 {
-    const char *filename = "/var/lib/cam-table/cam.bin";
+    const char *filename = get_cam_table_primary_path();
     FILE *file = fopen(filename, "rb");
     if (!file)
         return 0; // If file doesn't exist, MAC is not blocked
@@ -301,21 +317,9 @@ int is_mac_blocked(const uint8_t *mac_bytes)
 // ===== CAM TABLE FUNCTIONS =====
 
 /**
- * cam_table_block_mac - Block MAC address in CAM table
- * @manager: CAM table manager instance
- * @mac_bytes: MAC address to block (6-byte array)
- * @vlan_id: VLAN identifier for the MAC entry
- * @reason: Description of why MAC is being blocked
- *
- * Adds MAC address to CAM table with blocked status and updates
- * table statistics. Checks for existing blocks before adding.
- *
- * Return: 0 on success, -1 on error or manager not initialized
- */
-/**
  * block_mac_in_file - Internal function to block MAC in file (delegated)
  * @mac_bytes: MAC address to block (6-byte array)
- * @vlan_id: VLAN identifier for the MAC entry  
+ * @vlan_id: VLAN identifier for the MAC entry
  * @reason: Description of why MAC is being blocked
  *
  * Internal function that handles file operations for blocking MAC
@@ -324,99 +328,117 @@ int is_mac_blocked(const uint8_t *mac_bytes)
  */
 static int block_mac_in_file(const uint8_t *mac_bytes, uint16_t vlan_id, const char *reason)
 {
-    const char *filename = "/var/lib/cam-table/cam.bin";
+    const char *filename = get_cam_table_primary_path();
     int fd = -1;
     FILE *file = NULL;
     int result = -1;
-    
+
     fd = open(filename, O_RDWR | O_CREAT, 0700);
-    if (fd == -1) {
+    if (fd == -1)
+    {
         printf("✗ Failed to open CAM file for blocking: %s\n", strerror(errno));
         return -1;
     }
-    
-    if (flock(fd, LOCK_EX) == -1) {
+
+    if (flock(fd, LOCK_EX) == -1)
+    {
         printf("✗ Failed to lock CAM file: %s\n", strerror(errno));
         goto cleanup;
     }
-    
+
     file = fdopen(fd, "r+b");
-    if (!file) {
+    if (!file)
+    {
         printf("✗ Failed to convert file descriptor: %s\n", strerror(errno));
         goto cleanup;
     }
-    
+
     cam_file_header_t header;
-    if (fread(&header, sizeof(header), 1, file) != 1) {
+    if (fread(&header, sizeof(header), 1, file) != 1)
+    {
         printf("✗ Failed to read CAM header\n");
         goto cleanup;
     }
 
     cam_file_entry_t entry;
     int found = 0;
-    
-    for (uint32_t i = 0; i < header.total_entries; i++) {
-        if (fread(&entry, sizeof(entry), 1, file) != 1) {
+
+    for (uint32_t i = 0; i < header.total_entries; i++)
+    {
+        if (fread(&entry, sizeof(entry), 1, file) != 1)
+        {
             break;
         }
-        
+
         if (entry.status == ENTRY_FREE ||
-            (memcmp(entry.mac, mac_bytes, 6) == 0 && entry.vlan_id == vlan_id)) {
+            (memcmp(entry.mac, mac_bytes, 6) == 0 && entry.vlan_id == vlan_id))
+        {
             found = 1;
-            
+
             memcpy(entry.mac, mac_bytes, 6);
             entry.vlan_id = vlan_id;
             entry.status = ENTRY_BLOCKED;
             entry.last_seen = time(NULL);
             strncpy(entry.reason, reason, sizeof(entry.reason) - 1);
             entry.reason[sizeof(entry.reason) - 1] = '\0';
-            
-            if (fseek(file, sizeof(header) + i * sizeof(entry), SEEK_SET) != 0) {
+
+            if (fseek(file, sizeof(header) + i * sizeof(entry), SEEK_SET) != 0)
+            {
                 found = 0;
                 break;
             }
-            
-            if (fwrite(&entry, sizeof(entry), 1, file) != 1) {
+
+            if (fwrite(&entry, sizeof(entry), 1, file) != 1)
+            {
                 found = 0;
                 break;
             }
-            
+
             header.blocked_count++;
-            if (entry.status == ENTRY_FREE) {
+            if (entry.status == ENTRY_FREE)
+            {
                 header.free_count--;
             }
-            
+
             break;
         }
     }
 
-    if (found) {
+    if (found)
+    {
         header.last_updated = time(NULL);
         if (fseek(file, 0, SEEK_SET) != 0 ||
-            fwrite(&header, sizeof(header), 1, file) != 1) {
+            fwrite(&header, sizeof(header), 1, file) != 1)
+        {
             found = 0;
-        } else {
+        }
+        else
+        {
             result = 0;
             printf("✓ MAC blocked in CAM table: %02X:%02X:%02X:%02X:%02X:%02X\n",
                    mac_bytes[0], mac_bytes[1], mac_bytes[2],
                    mac_bytes[3], mac_bytes[4], mac_bytes[5]);
         }
     }
-    
-    if (!found) {
+
+    if (!found)
+    {
         printf("✗ MAC not found or update failed: %02X:%02X:%02X:%02X:%02X:%02X\n",
                mac_bytes[0], mac_bytes[1], mac_bytes[2],
                mac_bytes[3], mac_bytes[4], mac_bytes[5]);
     }
 
 cleanup:
-    if (file) {
-        fclose(file);  
-    } else if (fd != -1) {
+    if (file)
+    {
+        fclose(file);
+    }
+    else if (fd != -1)
+    {
         flock(fd, LOCK_UN);
         close(fd);
     }
-    
+
     return result;
 }
 
@@ -427,17 +449,17 @@ cleanup:
  * @vlan_id: VLAN identifier
  * @status: New status for the MAC entry
  */
-static void update_memory_cache(cam_table_manager_t *manager, const uint8_t *mac_bytes, 
-                               uint16_t vlan_id, cam_entry_status_t status)
+static void update_memory_cache(cam_table_manager_t *manager, const uint8_t *mac_bytes,
+                                uint16_t vlan_id, cam_entry_status_t status)
 {
     pthread_rwlock_wrlock(&manager->rwlock);
-    
+
     // Update your in-memory data structures here
     // For example:
     // - Update hash table
-    // - Update blocked MACs list  
+    // - Update blocked MACs list
     // - Update statistics
-    
+
     pthread_rwlock_unlock(&manager->rwlock);
 }
 
@@ -452,18 +474,19 @@ static void update_memory_cache(cam_table_manager_t *manager, const uint8_t *mac
 static int is_mac_already_blocked(cam_table_manager_t *manager, const uint8_t *mac_bytes, uint16_t vlan_id)
 {
     int blocked = 0;
-    
+
     pthread_rwlock_rdlock(&manager->rwlock);
     // Check your in-memory data structures
     // blocked = check_if_mac_blocked(manager, mac_bytes, vlan_id);
     pthread_rwlock_unlock(&manager->rwlock);
-    
-    if (blocked) {
+
+    if (blocked)
+    {
         printf("→ MAC already blocked in CAM table: %02X:%02X:%02X:%02X:%02X:%02X\n",
                mac_bytes[0], mac_bytes[1], mac_bytes[2],
                mac_bytes[3], mac_bytes[4], mac_bytes[5]);
     }
-    
+
     return blocked;
 }
 
@@ -478,23 +501,26 @@ static int is_mac_already_blocked(cam_table_manager_t *manager, const uint8_t *m
  *
  * Return: 0 on success, -1 on error
  */
-int cam_table_block_mac(cam_table_manager_t *manager, const uint8_t *mac_bytes, 
-                       uint16_t vlan_id, const char *reason)
+int cam_table_block_mac(cam_table_manager_t *manager, const uint8_t *mac_bytes,
+                        uint16_t vlan_id, const char *reason)
 {
-    if (!manager || !manager->initialized || !mac_bytes || !reason) {
+    if (!manager || !manager->initialized || !mac_bytes || !reason)
+    {
         return -1;
     }
-    
-    if (is_mac_already_blocked(manager, mac_bytes, vlan_id)) {
+
+    if (is_mac_already_blocked(manager, mac_bytes, vlan_id))
+    {
         return 0;
     }
-    
+
     int result = block_mac_in_file(mac_bytes, vlan_id, reason);
 
-    if (result == 0) {
+    if (result == 0)
+    {
         update_memory_cache(manager, mac_bytes, vlan_id, ENTRY_BLOCKED);
     }
-    
+
     return result;
 }
 
@@ -514,7 +540,7 @@ int cam_table_unblock_mac(cam_table_manager_t *manager, const uint8_t *mac_bytes
     if (!manager || !manager->initialized)
         return -1;
 
-    const char *filename = "/var/lib/cam-table/cam.bin";
+    const char *filename = get_cam_table_primary_path();
     FILE *file = fopen(filename, "r+b");
     if (!file)
         return -1;
@@ -578,7 +604,7 @@ int cam_table_set_mac_pending(cam_table_manager_t *manager, const uint8_t *mac_b
     if (!manager || !manager->initialized)
         return -1;
 
-    const char *filename = "/var/lib/cam-table/cam.bin";
+    const char *filename = get_cam_table_primary_path();
     FILE *file = fopen(filename, "r+b");
     if (!file)
         return -1;
@@ -674,40 +700,6 @@ void init_detector(anomaly_detector_t *detector, cam_table_manager_t *cam_manage
 }
 
 /**
- * get_device_hash_by_ip - Get REAL device hash from Redis
- */
-char *get_device_hash_by_ip(const char *ip)
-{
-    char command[512];
-    static char device_hash[128] = {0};
-
-    if (!ip || strlen(ip) == 0)
-    {
-        return NULL;
-    }
-
-    snprintf(command, sizeof(command),
-             "redis-cli -a 1234 --raw GET ip_device:%s 2>/dev/null", ip);
-
-    FILE *fp = popen(command, "r");
-    if (fp && fgets(device_hash, sizeof(device_hash), fp))
-    {
-        device_hash[strcspn(device_hash, "\n")] = 0;
-        // pclose(fp);
-
-        if (strlen(device_hash) > 0)
-        {
-            printf("→ Found device hash: %s for IP: %s\n", device_hash, ip);
-            return device_hash;
-        }
-    }
-
-    // pclose(fp);
-    printf("→ No device hash found for IP: %s\n", ip);
-    return NULL;
-}
-
-/**
  * send_ban_to_social_network - Final working version
  */
 void send_ban_to_social_network(const char *ip, const uint8_t *mac,
@@ -716,7 +708,7 @@ void send_ban_to_social_network(const char *ip, const uint8_t *mac,
 {
     char command[1024];
 
-    char *device_hash = get_device_hash_by_ip(ip);
+    char *device_hash = get_device_hash_secure(ip);
     if (!device_hash)
     {
         printf("→ No device hash found for attacking IP: %s (user not logged in?)\n", ip);
@@ -724,9 +716,9 @@ void send_ban_to_social_network(const char *ip, const uint8_t *mac,
     }
 
     const char *level_str = "pending";
-    if (ban_level == BLOCK_LEVEL_HARD)
+    if (ban_level == get_block_level_hard())
         level_str = "hard";
-    else if (ban_level == BLOCK_LEVEL_PERMANENT)
+    else if (ban_level == get_block_level_permanent())
         level_str = "permanent";
 
     printf("→ Sending ban for attacking IP: %s → device: %s → user: [will be blocked]\n", ip, device_hash);
@@ -735,8 +727,9 @@ void send_ban_to_social_network(const char *ip, const uint8_t *mac,
              "curl -X POST -H \"Content-Type: application/json\" "
              "-d '{\"deviceHash\": \"%s\", \"reason\": \"%s\", "
              "\"duration\": %d, \"level\": \"%s\"}' "
-             "http://172.22.224.1:8088/api/v1/auth/lock-user-by-device --max-time 5 --silent",
-             device_hash, reason, duration, level_str);
+             "%s/lock-user-by-device --max-time %d --silent",
+             device_hash, reason, duration, level_str,
+             get_social_network_api_url(), get_curl_timeout_sec());
 
     int result = system(command);
     if (result == 0)
@@ -758,7 +751,7 @@ void unblock_device(const char *ip, const uint8_t *mac,
 {
     char command[1024];
 
-    char *device_hash = get_device_hash_by_ip(ip);
+    char *device_hash = get_device_hash_secure(ip);
     if (!device_hash)
     {
         printf("→ No device hash found for attacking IP: %s (user not logged in?)\n", ip);
@@ -766,28 +759,29 @@ void unblock_device(const char *ip, const uint8_t *mac,
     }
 
     const char *level_str = "pending";
-    if (ban_level == BLOCK_LEVEL_HARD)
+    if (ban_level == get_block_level_hard())
         level_str = "hard";
-    else if (ban_level == BLOCK_LEVEL_PERMANENT)
+    else if (ban_level == get_block_level_permanent())
         level_str = "permanent";
 
-    printf("→ Sending ban for attacking IP: %s → device: %s → user: [will be blocked]\n", ip, device_hash);
+    printf("→ Sending unblock for attacking IP: %s → device: %s\n", ip, device_hash);
 
     snprintf(command, sizeof(command),
              "curl -X POST -H \"Content-Type: application/json\" "
              "-d '{\"deviceHash\": \"%s\", \"reason\": \"%s\", "
              "\"duration\": %d, \"level\": \"%s\"}' "
-             "http://172.22.224.1:8088/api/v1/auth/unlock-user-by-device --max-time 5 --silent",
-             device_hash, reason, duration, level_str, block_until);
+             "%s/unlock-user-by-device --max-time %d --silent",
+             device_hash, reason, duration, level_str,
+             get_social_network_api_url(), get_curl_timeout_sec());
 
     int result = system(command);
     if (result == 0)
     {
-        printf("✓ User successfully banned via device hash\n");
+        printf("✓ User successfully unblocked via device hash\n");
     }
     else
     {
-        printf("✗ Failed to send ban (code: %d)\n", result);
+        printf("✗ Failed to send unblock (code: %d)\n", result);
     }
 }
 
@@ -816,7 +810,7 @@ void block_ip(const char *ip, const uint8_t *mac, const char *reason, int durati
     }
     else
     {
-        const char *filename = "/mnt/c/Users/dmako/kryosette/kryosette-servers/bridge/var/lib/cam-table/cam.bin";
+        const char *filename = get_cam_table_primary_path();
 
         printf("→ Attempting to write to CAM table: %s\n", filename);
 
@@ -826,7 +820,13 @@ void block_ip(const char *ip, const uint8_t *mac, const char *reason, int durati
             printf("✗ Failed to open CAM file, creating new...\n");
 
             char dir_cmd[512];
-            snprintf(dir_cmd, sizeof(dir_cmd), "mkdir -p /mnt/c/Users/dmako/kryosette/kryosette-servers/bridge/var/lib/cam-table/");
+            char dir_path[256] = {0};
+            strncpy(dir_path, filename, sizeof(dir_path) - 1);
+            char *last_slash = strrchr(dir_path, '/');
+            if (last_slash)
+                *last_slash = '\0';
+
+            snprintf(dir_cmd, sizeof(dir_cmd), "mkdir -p %s", dir_path);
             system(dir_cmd);
 
             file = fopen(filename, "w+b");
@@ -841,17 +841,17 @@ void block_ip(const char *ip, const uint8_t *mac, const char *reason, int durati
                 .magic = CAM_MAGIC,
                 .version = CAM_VERSION,
                 .entry_size = sizeof(cam_file_entry_t),
-                .total_entries = DEFAULT_CAPACITY,
+                .total_entries = get_default_cam_capacity(),
                 .trusted_count = 0,
                 .pending_count = 0,
                 .blocked_count = 0,
-                .free_count = DEFAULT_CAPACITY,
+                .free_count = get_default_cam_capacity(),
                 .created_time = time(NULL),
                 .last_updated = time(NULL)};
             fwrite(&header, sizeof(header), 1, file);
 
             cam_file_entry_t empty_entry = {0};
-            for (uint32_t i = 0; i < DEFAULT_CAPACITY; i++)
+            for (uint32_t i = 0; i < get_default_cam_capacity(); i++)
             {
                 fwrite(&empty_entry, sizeof(empty_entry), 1, file);
             }
@@ -937,7 +937,7 @@ void block_ip(const char *ip, const uint8_t *mac, const char *reason, int durati
     snprintf(command, sizeof(command), "iptables -A INPUT -s %s -j DROP 2>/dev/null", ip);
     system(command);
 
-    FILE *log_file = fopen("/mnt/c/Users/dmako/kryosette/kryosette-servers/bridge/var/log/cam-table/cam.log", "a");
+    FILE *log_file = fopen(get_cam_log_path(), "a");
 
     if (!log_file)
     {
@@ -993,23 +993,23 @@ void add_to_block_list(anomaly_detector_t *detector, const char *ip, const uint8
         {
             detector->blocked_ips[i].violation_count++;
 
-            if (detector->blocked_ips[i].violation_count >= 3)
+            if (detector->blocked_ips[i].violation_count >= get_max_violations_permanent())
             {
-                detector->blocked_ips[i].block_level = BLOCK_LEVEL_PERMANENT;
+                detector->blocked_ips[i].block_level = get_block_level_permanent();
                 detector->blocked_ips[i].block_duration = 0;
                 strcpy(detector->blocked_ips[i].reason, "PERMANENT BAN: Multiple violations");
 
                 send_ban_to_social_network(ip, mac, "PERMANENT: Multiple violations",
-                                           0, BLOCK_LEVEL_PERMANENT);
+                                           0, get_block_level_permanent());
             }
-            else if (detector->blocked_ips[i].violation_count >= 2)
+            else if (detector->blocked_ips[i].violation_count >= get_max_violations_hard())
             {
-                detector->blocked_ips[i].block_level = BLOCK_LEVEL_HARD;
+                detector->blocked_ips[i].block_level = get_block_level_hard();
                 detector->blocked_ips[i].block_duration = 3600;
                 strcpy(detector->blocked_ips[i].reason, "HARD BAN: Repeated violations");
 
                 send_ban_to_social_network(ip, mac, "HARD: Repeated violations",
-                                           3600, BLOCK_LEVEL_HARD);
+                                           3600, get_block_level_hard());
             }
 
             printf("✓ IP %s is already blacklisted. Violations: %d, Level: %d\n",
@@ -1025,15 +1025,15 @@ void add_to_block_list(anomaly_detector_t *detector, const char *ip, const uint8
         strncpy(detector->blocked_ips[detector->blocked_count].ip, ip, 15);
         memcpy(detector->blocked_ips[detector->blocked_count].mac, mac, 6);
         detector->blocked_ips[detector->blocked_count].block_time = time(NULL);
-        detector->blocked_ips[detector->blocked_count].block_level = BLOCK_LEVEL_PENDING;
+        detector->blocked_ips[detector->blocked_count].block_level = get_block_level_pending();
         detector->blocked_ips[detector->blocked_count].violation_count = 1;
         detector->blocked_ips[detector->blocked_count].block_duration = 3600; // 1 час
         strncpy(detector->blocked_ips[detector->blocked_count].reason, reason, 99);
 
-        send_ban_to_social_network(ip, mac, reason, 3600, BLOCK_LEVEL_PENDING);
+        send_ban_to_social_network(ip, mac, reason, 3600, get_block_level_pending());
 
         block_ip(ip, mac, reason, 3600);
-        apply_blocking_by_level(ip, mac, BLOCK_LEVEL_PENDING, reason);
+        apply_blocking_by_level(ip, mac, get_block_level_pending(), reason);
 
         if (detector->cam_manager && detector->cam_manager->initialized)
         {
@@ -1088,14 +1088,14 @@ void apply_blocking_by_level(const char *ip, const uint8_t *mac, int block_level
                  mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
         system(command);
 
-        snprintf(command, sizeof(command), "echo \"%s %02X:%02X:%02X:%02X:%02X:%02X %s\" >> /var/lib/cam-table/permanent_ban.list",
-                 ip, mac[0], mac[1], mac[2], mac[3], mac[4], mac[5], reason);
+        snprintf(command, sizeof(command), "echo \"%s %02X:%02X:%02X:%02X:%02X:%02X %s\" >> %s/permanent_ban.list",
+                 ip, mac[0], mac[1], mac[2], mac[3], mac[4], mac[5], reason, get_cam_table_primary_path());
         system(command);
         break;
     }
 
     // Логируем в файл
-    FILE *log_file = fopen("/mnt/c/Users/dmako/kryosette/kryosette-servers/bridge/var/log/cam-table/cam.log", "a");
+    FILE *log_file = fopen(get_cam_log_path(), "a");
     if (log_file)
     {
         time_t now = time(NULL);
@@ -1103,9 +1103,9 @@ void apply_blocking_by_level(const char *ip, const uint8_t *mac, int block_level
         strftime(timestamp, sizeof(timestamp), "%Y-%m-%d %H:%M:%S", localtime(&now));
 
         const char *level_str = "PENDING";
-        if (block_level == BLOCK_LEVEL_HARD)
+        if (block_level == get_block_level_hard())
             level_str = "HARD";
-        else if (block_level == BLOCK_LEVEL_PERMANENT)
+        else if (block_level == get_block_level_permanent())
             level_str = "PERMANENT";
 
         fprintf(log_file, "%s: %s_BLOCK IP:%s MAC:%02X:%02X:%02X:%02X:%02X:%02X - %s\n",
@@ -1132,7 +1132,7 @@ void check_block_expiry(anomaly_detector_t *detector)
     {
         blocked_ip_t *blocked = &detector->blocked_ips[i];
 
-        if (blocked->block_level == BLOCK_LEVEL_PERMANENT)
+        if (blocked->block_level == get_block_level_permanent())
         {
             i++;
             continue;
@@ -1663,12 +1663,12 @@ void print_blocked_ips(anomaly_detector_t *detector)
         {
             blocked_ip_t *blocked = &detector->blocked_ips[i];
             const char *level_str = "PENDING";
-            if (blocked->block_level == BLOCK_LEVEL_HARD)
+            if (blocked->block_level == get_block_level_hard())
                 level_str = "HARD";
-            else if (blocked->block_level == BLOCK_LEVEL_PERMANENT)
+            else if (blocked->block_level == get_block_level_permanent())
                 level_str = "PERMANENT";
 
-            if (blocked->block_level == BLOCK_LEVEL_PERMANENT)
+            if (blocked->block_level == get_block_level_permanent())
             {
                 printf("  %s (MAC: %02X:%02X:%02X:%02X:%02X:%02X) - %s [%s] [Нарушений: %d]\n",
                        blocked->ip, blocked->mac[0], blocked->mac[1], blocked->mac[2],
@@ -1724,10 +1724,16 @@ void start_comprehensive_monitoring(const char *interface, cam_table_manager_t *
         return;
     }
 
+    // Инициализация Redis
+    if (!redis_manager_init())
+    {
+        printf("⚠️  Redis not available, continuing without device hash lookup\n");
+    }
+
     // Baseline statistics collection
     time_t start_time = time(NULL);
     unsigned char buffer[65536];
-    while (!stop_monitoring && (time(NULL) - start_time) < 8)
+    while (!stop_monitoring && (time(NULL) - start_time) < get_baseline_collection_sec())
     {
         get_proc_net_stats(interface, &detector.current);
         int packet_size = recv(raw_sock, buffer, sizeof(buffer), 0);
@@ -1751,7 +1757,7 @@ void start_comprehensive_monitoring(const char *interface, cam_table_manager_t *
 
         time_t cycle_start = time(NULL);
         int packets_this_cycle = 0;
-        while (!stop_monitoring && (time(NULL) - cycle_start) < 3)
+        while (!stop_monitoring && (time(NULL) - cycle_start) < get_monitoring_cycle_sec())
         {
             get_proc_net_stats(interface, &detector.current);
             int packet_size = recv(raw_sock, buffer, sizeof(buffer), 0);
@@ -1763,7 +1769,7 @@ void start_comprehensive_monitoring(const char *interface, cam_table_manager_t *
             usleep(1000);
         }
 
-        detector.current.packets_per_second = packets_this_cycle / 3;
+        detector.current.packets_per_second = packets_this_cycle / get_monitoring_cycle_sec();
         int score = detect_anomalies(&detector);
         print_blocked_ips(&detector);
 
@@ -1775,6 +1781,7 @@ void start_comprehensive_monitoring(const char *interface, cam_table_manager_t *
     close(raw_sock);
     pthread_mutex_destroy(&detector.block_mutex);
     pthread_mutex_destroy(&detector.map_mutex);
+    redis_manager_cleanup();
 
     printf("\n→ SECURITY SUMMARY:\n");
     printf("Total cycles: %d\n", cycles);
