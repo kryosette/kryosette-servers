@@ -1,6 +1,4 @@
 #pragma once
-#ifndef SNMP_CONSTANTS_H
-#define SNMP_CONSTANTS_H
 
 #include <stdint.h>
 
@@ -97,5 +95,3 @@ extern "C"
 #ifdef __cplusplus
 }
 #endif
-
-#endif // SNMP_CONSTANTS_H
