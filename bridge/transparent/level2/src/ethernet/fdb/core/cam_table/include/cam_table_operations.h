@@ -1,6 +1,4 @@
 #pragma once
-#ifndef CAM_TABLE_OPERATIONS_H
-#define CAM_TABLE_OPERATIONS_H
 
 #include "cam_table.h"
 #include <pthread.h>
@@ -81,5 +79,3 @@ int cam_table_block_mac(cam_table_manager_t *manager,
 int cam_table_unblock_mac(cam_table_manager_t *manager,
                           const uint8_t *mac_bytes,
                           uint16_t vlan_id);
-
-#endif /* CAM_TABLE_OPERATIONS_H */

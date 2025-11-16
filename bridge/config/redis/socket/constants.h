@@ -1,5 +1,8 @@
 #pragma once
 
+#include <stddef.h>
+#include <stdint.h>
+
 #ifdef __cplusplus
 extern "C"
 {
@@ -22,10 +25,10 @@ extern "C"
     extern const char *SOCIAL_NETWORK_API_URL;
     extern const int CURL_TIMEOUT_SEC;
 
-    // Security thresholds
-    extern const int BLOCK_LEVEL_PENDING;
-    extern const int BLOCK_LEVEL_HARD;
-    extern const int BLOCK_LEVEL_PERMANENT;
+    // Security thresholds - переименуем чтобы избежать конфликта
+    extern const int SECURITY_BLOCK_LEVEL_PENDING;
+    extern const int SECURITY_BLOCK_LEVEL_HARD;
+    extern const int SECURITY_BLOCK_LEVEL_PERMANENT;
     extern const int MAX_VIOLATIONS_PERMANENT;
     extern const int MAX_VIOLATIONS_HARD;
 

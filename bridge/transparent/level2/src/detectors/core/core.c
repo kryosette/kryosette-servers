@@ -1,8 +1,8 @@
 #define _POSIX_C_SOURCE 200112L
 
-#include "/home/dima853/kryosette-servers/bridge/transparent/level2/src/detectors/core/include/core.h"
-#include "constants.h"
-#include "redis_manager.h"
+#include "/mnt/c/Users/dmako/kryosette/kryosette-servers/bridge/transparent/level2/src/detectors/core/include/core.h"
+#include "/mnt/c/Users/dmako/kryosette/kryosette-servers/bridge/config/redis/socket/constants.h"
+#include "/mnt/c/Users/dmako/kryosette/kryosette-servers/bridge/config/redis/socket/redis_manager.h"
 
 // ===== GLOBAL VARIABLES =====
 volatile sig_atomic_t stop_monitoring = 0;

@@ -28,7 +28,7 @@
 #include <netinet/udp.h>
 #include <netinet/if_ether.h>
 
-#include <net/if.h>   
+#include <net/if.h>
 #include <net/ethernet.h>
 #include <arpa/inet.h>
 
@@ -36,21 +36,22 @@
 #include <linux/if_ether.h>
 
 #ifdef __linux__
-#include <sys/file.h> 
+#include <sys/file.h>
 #else
-#include <sys/fcntl.h> 
+#include <sys/fcntl.h>
 #endif
 
 #include <time.h>
 
-static inline void msleep(int milliseconds) {
+static inline void msleep(int milliseconds)
+{
     struct timespec ts;
     ts.tv_sec = milliseconds / 1000;
     ts.tv_nsec = (milliseconds % 1000) * 1000000;
     nanosleep(&ts, NULL);
 }
 
-#include "/home/dima853/kryosette-servers/bridge/transparent/level2/src/ethernet/fdb/core/cam_table/include/cam_table_operations.h"
+#include "/mnt/c/Users/dmako/kryosette/kryosette-servers/bridge/transparent/level2/src/ethernet/fdb/core/cam_table/include/cam_table_operations.h"
 
 // ===== GLOBAL VARIABLES =====
 extern volatile sig_atomic_t stop_monitoring;

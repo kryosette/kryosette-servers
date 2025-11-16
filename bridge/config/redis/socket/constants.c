@@ -17,10 +17,10 @@ const uint32_t DEFAULT_CAM_CAPACITY = 1000;
 const char *SOCIAL_NETWORK_API_URL = "http://172.22.224.1:8088/api/v1/auth";
 const int CURL_TIMEOUT_SEC = 5;
 
-// Security thresholds
-const int BLOCK_LEVEL_PENDING = 1;
-const int BLOCK_LEVEL_HARD = 2;
-const int BLOCK_LEVEL_PERMANENT = 3;
+// Security thresholds - переименованные константы
+const int SECURITY_BLOCK_LEVEL_PENDING = 1;
+const int SECURITY_BLOCK_LEVEL_HARD = 2;
+const int SECURITY_BLOCK_LEVEL_PERMANENT = 3;
 const int MAX_VIOLATIONS_PERMANENT = 3;
 const int MAX_VIOLATIONS_HARD = 2;
 
@@ -87,17 +87,17 @@ int get_curl_timeout_sec(void)
 
 int get_block_level_pending(void)
 {
-    return BLOCK_LEVEL_PENDING;
+    return SECURITY_BLOCK_LEVEL_PENDING;
 }
 
 int get_block_level_hard(void)
 {
-    return BLOCK_LEVEL_HARD;
+    return SECURITY_BLOCK_LEVEL_HARD;
 }
 
 int get_block_level_permanent(void)
 {
-    return BLOCK_LEVEL_PERMANENT;
+    return SECURITY_BLOCK_LEVEL_PERMANENT;
 }
 
 int get_max_violations_permanent(void)
