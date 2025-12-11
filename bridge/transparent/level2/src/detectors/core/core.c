@@ -10,7 +10,12 @@
 // ===== GLOBAL VARIABLES =====
 volatile sig_atomic_t stop_monitoring = 0;
 
-static int send_netlink_socket() {
+struct nlattr {
+    uint16_t nla_len;
+    uint16_t nla_type;
+};
+
+static int send_netlink_socket(int type, const char *data, size_t len) {
     static int n_sock = -1;
     /*
     struct sockaddr_nl {
@@ -21,7 +26,10 @@ static int send_netlink_socket() {
            };
     */
     struct sockaddr_nl snl = {0};
-    struct nlmsghdr *nhdr = {0};
+    struct nlmsghdr *nlh = {0};
+    struct iovec iov = {0};
+    struct msghdr msg = {0};
+    char buf[4092] = {0};
 
     if (n_sock < 0) {
         n_sock = socket(AF_NETLINK, SOCK_STREAM, NETLINK_NETFILTER);
@@ -37,9 +45,130 @@ static int send_netlink_socket() {
         sa.nl_family = AF_NETLINK;
         sa.nl_pad = 0;
         sa.pid = getpid();
-        sa.nl_groups = -1;
+        sa.nl_groups = 0;
+
+        /*
+        int bind(int sockfd, const struct sockaddr *addr,
+                socklen_t addrlen);
+        */
+        if (bind(n_sock, (struct sockaddr*)&sa, sizeof((sa) < 0))) {
+            perror("sock err");
+            close(n_sock);
+            n_sock = -1;
+            return -1;
+        }
+
+        memset(buf, 0, sizeof(buf));
+        /*
+        struct nlmsghdr {
+               __u32 nlmsg_len;    /* Size of message including header 
+               __u16 nlmsg_type;   /* Type of message content 
+               __u16 nlmsg_flags;  /* Additional flags  
+               __u32 nlmsg_seq;    /* Sequence number
+               __u32 nlmsg_pid;    /* Sender port ID  
+           };
+        */
+        nlh = (struct nlmsghdr*)buf;
+        nlh->nlmsg_len = NLMSG_SPACE(len);
+        nlh->nlmsg_type = type;
+        nlh->nlmsg_flags = NLM_F_REQUEST | NLM_F_ACK | NLM_F_CREATE;
+        nlh->nlmsg_seq = time(NULL);
+        nlh->nlmsg_pid = getpid();
+
+        if (data && len > 0) {
+            /*
+            NLMSG_DATA()
+              Return a pointer to the payload associated with the passed
+              nlmsghdr.
+            */
+            memcpy(NLMSG_DATA(hlh), data, len);
+        }
+
+        /*
+        Describes a region of memory, beginning at iov_base address and
+       with the size of iov_len bytes.  System calls use arrays of this
+       structure, where each element of the array represents a memory
+       region, and the whole array represents a vector of memory regions.
+       The maximum number of iovec structures in that array is limited by
+       IOV_MAX (defined in <limits.h>, or accessible via the call
+       sysconf(_SC_IOV_MAX)).
+        */
+        iov.iov_base = buf;
+        iov.iov_len = len;
+
+        memset(&msg, 0, sizeof(msg));
+        msg.msg_name = &sa;
+        msg.msg_namelen = sizeof(sa);
+        msg.msg_iov = &iov;
+        msg.msg_iovlen = 1;
+
+        // warning
+        /*
+        ssize_t sendmsg(int socket, const struct msghdr *message, int flags);
+
+        The sendmsg() function shall send a message through a connection-
+       mode or connectionless-mode socket. If the socket is a
+       connectionless-mode socket, the message shall be sent to the
+       address specified by msghdr if no pre-specified peer address has
+       been set. If a peer address has been pre-specified, either the
+       message shall be sent to the address specified in msghdr
+       (overriding the pre-specified peer address), or the function shall
+       return -1 and set errno to [EISCONN].  If the socket is
+       connection-mode, the destination address in msghdr shall be
+       ignored.
+        */
+        if (sendmsg(n_sock, &msg, 0) < 0) {
+            perror("sendmsg error");
+            errno = EISCONN;
+            return -1;
+        }
+
+        return 0;
     }
 
+}
+
+static void add_attr(struct nlmsghdr *nlh, int maxlen, int type, 
+                     const void *data, int datalen) {
+    struct nlattr* nla = {0};
+    int pad = 0;
+
+    /*
+    NLMSG_ALIGN()
+              Round the size of a netlink message up to align it
+              properly.
+    */
+    pad = NLMSG_ALIGN(nlh->nlmsg_len) - nlh->nlmsg_len;
+    if (pad > 0 && nlh->nlmsg_len + pad <= maxlen) {
+        memset((void*)nlh + nlh->nlmsg_len, 0, pad);
+        nlh->nlmsg_len += pad;
+    }
+
+    // warning NLA_HDRLEN 
+    if (nlh->nlmsg_len + NLA_HDRLEN + datalen > maxlen) {
+        fprintf(stderr, "Netlink message too long\n");
+        return;
+    }
+
+    /*
+        struct nlmsghdr {
+               __u32 nlmsg_len;    /* Size of message including header 
+               __u16 nlmsg_type;   /* Type of message content 
+               __u16 nlmsg_flags;  /* Additional flags  
+               __u32 nlmsg_seq;    /* Sequence number
+               __u32 nlmsg_pid;    /* Sender port ID  
+           };
+        */
+    nla = (struct nlattr*)((void*)nlh + nlh->nlmsg_len);
+    nla->nlmsg_type;
+    // warning NLA_HDRLEN
+    nla->nlmsg_len = NLA_HDRLEN + len;
+
+    nlh-> 
+}
+
+static int block_ip_nftlink() {
+    
 }
 
 // ===== CAM TABLE UTILITIES =====
