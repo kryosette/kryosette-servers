@@ -1,11 +1,46 @@
 #define _POSIX_C_SOURCE 200112L
+#define GNU_SOURCE
 
 #include "/mnt/c/Users/dmako/kryosette/kryosette-servers/bridge/transparent/level2/src/detectors/core/include/core.h"
 #include "/mnt/c/Users/dmako/kryosette/kryosette-servers/bridge/config/redis/socket/constants.h"
 #include "/mnt/c/Users/dmako/kryosette/kryosette-servers/bridge/config/redis/socket/redis_manager.h"
+#include <linux/netlink.h>
+#include <unistd.h>
 
 // ===== GLOBAL VARIABLES =====
 volatile sig_atomic_t stop_monitoring = 0;
+
+static int send_netlink_socket() {
+    static int n_sock = -1;
+    /*
+    struct sockaddr_nl {
+               sa_family_t     nl_family;  /* AF_NETLINK 
+               unsigned short  nl_pad;     /* Zero  
+               pid_t           nl_pid;     /* Port ID 
+               __u32           nl_groups;  /* Multicast groups mask 
+           };
+    */
+    struct sockaddr_nl snl = {0};
+    struct nlmsghdr *nhdr = {0};
+
+    if (n_sock < 0) {
+        n_sock = socket(AF_NETLINK, SOCK_STREAM, NETLINK_NETFILTER);
+        if (n_sock < 0) {
+            printf("sock err");
+            return -1;
+        } else if (errno == EACCES) {
+            prinf("acces error");
+            return -1
+        }
+
+        memset(&snl, 0, sizeof(snl));
+        sa.nl_family = AF_NETLINK;
+        sa.nl_pad = 0;
+        sa.pid = getpid();
+        sa.nl_groups = -1;
+    }
+
+}
 
 // ===== CAM TABLE UTILITIES =====
 
@@ -26,9 +61,19 @@ static int create_cam_directory()
     // Extract directory from full path
     char primary_dir[256] = {0};
     char fallback_dir[256] = {0};
+
+    // warning
+    primary_dir = [sizeof(primary_dir) - 1] = '\0';
+    fallback_dir = [sizeof(fallback_dir) - 1] = '\0';
+
     strncpy(primary_dir, primary_path, sizeof(primary_dir) - 1);
     strncpy(fallback_dir, fallback_path, sizeof(fallback_dir) - 1);
 
+    /*
+       strrchr — string scanning operation
+
+       char *strrchr(const char *s, int c);
+    */
     char *primary_slash = strrchr(primary_dir, '/');
     char *fallback_slash = strrchr(fallback_dir, '/');
 
@@ -563,6 +608,19 @@ int cam_table_unblock_mac(cam_table_manager_t *manager, const uint8_t *mac_bytes
             memset(&entry, 0, sizeof(entry));
             entry.status = ENTRY_FREE;
 
+            /*
+            int fseek(FILE *stream, long offset, int whence);
+
+            The fseek() function sets the file position indicator for the
+       stream pointed to by stream.  The new position, measured in bytes,
+       is obtained by adding offset bytes to the position specified by
+       whence.  If whence is set to SEEK_SET, SEEK_CUR, or SEEK_END, the
+       offset is relative to the start of the file, the current position
+       indicator, or end-of-file, respectively.  A successful call to the
+       fseek() function clears the end-of-file indicator for the stream
+       and undoes any effects of the ungetc(3) function on the same
+       stream.
+            */
             fseek(file, sizeof(header) + i * sizeof(entry), SEEK_SET);
             fwrite(&entry, sizeof(entry), 1, file);
 
@@ -612,7 +670,8 @@ int cam_table_set_mac_pending(cam_table_manager_t *manager, const uint8_t *mac_b
     cam_file_header_t header;
     fread(&header, sizeof(header), 1, file);
 
-    cam_file_entry_t entry;
+    // warning
+    cam_file_entry_t entry = {0};
     int found = 0;
 
     for (uint32_t i = 0; i < header.total_entries; i++)
@@ -798,10 +857,14 @@ void unblock_device(const char *ip, const uint8_t *mac,
  */
 void block_ip(const char *ip, const uint8_t *mac, const char *reason, int duration)
 {
-    char command[256];
+    char command[512] = {0};
 
-    printf("→ L2 BLOCK MAC: %02X:%02X:%02X:%02X:%02X:%02X | IP: %s | Reason: %s\n",
-           mac[0], mac[1], mac[2], mac[3], mac[4], mac[5], ip, reason);
+    int written = snprintf("→ L2 BLOCK MAC: %02X:%02X:%02X:%02X:%02X:%02X | IP: %s | Reason: %s\n",
+           mac[0], mac[1], mac[2], mac[3], mac[4], mac[5], (ip ? ip : (null)), (reason ? reason : (null)));
+    if (written < 0 || written >= sizeof(command)) {
+        printf("buffer overflow");
+        return;
+    }
 
     // First check if MAC is already blocked
     if (is_mac_blocked(mac))
@@ -814,12 +877,47 @@ void block_ip(const char *ip, const uint8_t *mac, const char *reason, int durati
 
         printf("→ Attempting to write to CAM table: %s\n", filename);
 
+        /*
+        int open(const char *path, int flags, ...
+                  /* mode_t mode  );
+
+        The argument flags must include one of the following access modes:
+        O_RDONLY, O_WRONLY, or O_RDWR. 
+
+        The file creation flags are
+       O_CLOEXEC, O_CREAT, O_DIRECTORY, O_EXCL, O_NOCTTY, O_NOFOLLOW,
+       O_TMPFILE, and O_TRUNC
+
+       Ensure that this call creates the file: if this flag is
+              specified in conjunction with O_CREAT, and path already
+              exists, then open() fails with the error EEXIST.1
+        */
+        int fd = open(filename, O_RDWR | O_CREAT | O_EXCL, 0700);// fdopen
+
+        if (fd < 0) {
+            /*
+            FILE *fdopen(int fildes, const char *mode);
+
+            fdopen — associate a stream with a file descriptor
+            */
+            FILE *fl = fdopen(filename, "r+b");
+        } else if (errno == EEXIST) {
+            FILE *fl = fopen(filename, "r+b");
+        }
+
         FILE *file = fopen(filename, "r+b");
         if (!file)
         {
             printf("✗ Failed to open CAM file, creating new...\n");
 
-            char dir_cmd[512];
+            char dir_cmd[512] = {0};
+            /*
+            char *strpbrk(const char *s, const char *accept);
+            */
+            if (strpbrk(dir_path, ";|&$`(){}[]<>!") != NULL) {
+                printf("✗ Dangerous characters in path\n");
+                return;
+            }
             char dir_path[256] = {0};
             strncpy(dir_path, filename, sizeof(dir_path) - 1);
             char *last_slash = strrchr(dir_path, '/');
@@ -859,7 +957,7 @@ void block_ip(const char *ip, const uint8_t *mac, const char *reason, int durati
             printf("✓ New CAM file created and initialized\n");
         }
 
-        cam_file_header_t header;
+        cam_file_header_t header = {0};
         size_t read_result = fread(&header, sizeof(header), 1, file);
         printf("→ Read header records: %zu\n", read_result);
 
@@ -870,7 +968,7 @@ void block_ip(const char *ip, const uint8_t *mac, const char *reason, int durati
             return;
         }
 
-        cam_file_entry_t entry;
+        cam_file_entry_t entry = {0};
         int found = 0;
 
         for (uint32_t i = 0; i < header.total_entries; i++)
@@ -891,7 +989,12 @@ void block_ip(const char *ip, const uint8_t *mac, const char *reason, int durati
                 entry.vlan_id = 1;
                 entry.status = ENTRY_BLOCKED;
                 entry.last_seen = time(NULL);
+
+                // warning
+                entry.reason = [sizeof(entry.reason) - 1] = '\0';
                 strncpy(entry.reason, reason, sizeof(entry.reason) - 1);
+
+                entry.ip_address = [sizeof(entry.ip_address) - 1] = '\0'
                 strncpy(entry.ip_address, ip, sizeof(entry.ip_address) - 1);
                 entry.block_duration = duration;
                 entry.block_time = time(NULL);

@@ -1,6 +1,4 @@
 #pragma once
-#ifndef CORE_H
-#define CORE_H
 
 #define _GNU_SOURCE
 #define __USE_MISC
@@ -516,5 +514,3 @@ void handle_usr1(int sig);
 void send_ban_to_social_network(const char *ip, const uint8_t *mac,
                                 const char *reason, int duration,
                                 int ban_level);
-
-#endif /* CORE_H */
