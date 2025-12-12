@@ -6,6 +6,7 @@
 #include "/mnt/c/Users/dmako/kryosette/kryosette-servers/bridge/config/redis/socket/redis_manager.h"
 #include <linux/netlink.h>
 #include <unistd.h>
+#include <stdint.h>
 
 // ===== GLOBAL VARIABLES =====
 volatile sig_atomic_t stop_monitoring = 0;
@@ -31,9 +32,16 @@ static int send_netlink_socket(int type, const char *data, size_t len) {
     struct msghdr msg = {0};
     char buf[4092] = {0};
 
+    uint8_t check_mask = 0; 
+
+    if (validate_netlink_params(type, data, len) != 0) {
+        return -1;
+    }
+
     if (n_sock < 0) {
         n_sock = socket(AF_NETLINK, SOCK_STREAM, NETLINK_NETFILTER);
         if (n_sock < 0) {
+            set_socket_state_bit(get_err_socket_mask());
             printf("sock err");
             return -1;
         } else if (errno == EACCES) {
@@ -41,20 +49,45 @@ static int send_netlink_socket(int type, const char *data, size_t len) {
             return -1
         }
 
+        set_socket_state_bit(get_sock_created_mask());
+
         memset(&snl, 0, sizeof(snl));
         sa.nl_family = AF_NETLINK;
         sa.nl_pad = 0;
         sa.pid = getpid();
+        /*
+        A sockaddr_nl can be either unicast (only sent
+        to one peer) or sent to netlink multicast groups (nl_groups not
+        equal 0).
+        */
         sa.nl_groups = 0;
+
+        set_check_bit(&check_mask, get_check_snl_mask());
 
         /*
         int bind(int sockfd, const struct sockaddr *addr,
                 socklen_t addrlen);
         */
-        if (bind(n_sock, (struct sockaddr*)&sa, sizeof((sa) < 0))) {
-            perror("sock err");
+        if (bind(n_sock, (struct sockaddr*)&snl, sizeof(snl)) < 0) {
+            if (errno == EACCES) {
+                set_socket_state_bit(get_err_eacces_mask());
+                perror("access error");
+            } else {
+                set_socket_state_bit(get_err_bind_mask());
+                perror("bind error");
+            }
+            
             close(n_sock);
             n_sock = -1;
+            clear_socket_state_bit(get_sock_created_mask());
+            return -1;
+        }
+        
+        set_socket_state_bit(get_sock_bound_mask());
+
+        if (!is_socket_ready()) {
+            printf("Сокет не готов к отправке\n");
+            print_socket_state();
             return -1;
         }
 
@@ -75,6 +108,8 @@ static int send_netlink_socket(int type, const char *data, size_t len) {
         nlh->nlmsg_seq = time(NULL);
         nlh->nlmsg_pid = getpid();
 
+        set_check_bit(&check_mask, get_check_nlhdr_mask());
+
         if (data && len > 0) {
             /*
             NLMSG_DATA()
@@ -82,6 +117,7 @@ static int send_netlink_socket(int type, const char *data, size_t len) {
               nlmsghdr.
             */
             memcpy(NLMSG_DATA(hlh), data, len);
+            set_check_bit(&check_mask, get_check_data_mask());
         }
 
         /*
@@ -96,11 +132,15 @@ static int send_netlink_socket(int type, const char *data, size_t len) {
         iov.iov_base = buf;
         iov.iov_len = len;
 
+        set_check_bit(&check_mask, get_check_data_mask());
+
         memset(&msg, 0, sizeof(msg));
         msg.msg_name = &sa;
         msg.msg_namelen = sizeof(sa);
         msg.msg_iov = &iov;
         msg.msg_iovlen = 1;
+
+        set_check_bit(&check_mask, get_check_msg_mask());
 
         // warning
         /*
@@ -117,11 +157,45 @@ static int send_netlink_socket(int type, const char *data, size_t len) {
        connection-mode, the destination address in msghdr shall be
        ignored.
         */
-        if (sendmsg(n_sock, &msg, 0) < 0) {
-            perror("sendmsg error");
-            errno = EISCONN;
+        // if (sendmsg(n_sock, &msg, 0) < 0) {
+        //     perror("sendmsg error");
+        //     errno = EISCONN;
+        //     return -1;
+        // }
+
+        uint8_t required_checks = get_required_checks_mask();
+    
+        if ((check_mask & required_checks) != required_checks) {
+            printf("Ошибка: не все структуры инициализированы\n");
+            printf("  Ожидалось: 0x%02X\n", required_checks);
+            printf("  Получено:  0x%02X\n", check_mask);
+        
+            uint8_t missing = required_checks & ~check_mask;
+        
+            if (missing & get_check_nlhdr_mask()) printf("    - nlmsghdr не инициализирован\n");
+            if (missing & get_check_iov_mask())   printf("    - iovec не инициализирован\n");
+            if (missing & get_check_msg_mask())   printf("    - msghdr не инициализирован\n");
+            if (missing & get_check_snl_mask())   printf("    - sockaddr_nl не инициализирован\n");
+        
             return -1;
         }
+
+        int send_result = sendmsg(n_sock, &msg, 0);
+    
+        if (send_result < 0) {
+            if (errno == EISCONN) {
+                set_socket_state_bit(get_err_eisconn_mask());
+                printf("Сокет уже подключен\n");
+            } else {
+                set_socket_state_bit(get_err_sendmsg_mask());
+                perror("sendmsg error");
+            }
+            return -1;
+        }
+    
+        reset_socket_errors();
+    
+        set_socket_state_bit(get_sock_valid_mask());
 
         return 0;
     }
@@ -167,8 +241,8 @@ static void add_attr(struct nlmsghdr *nlh, int maxlen, int type,
     nlh-> 
 }
 
-static int block_ip_nftlink() {
-    
+static int block_ip_nftlink(const char *ip) {
+
 }
 
 // ===== CAM TABLE UTILITIES =====
