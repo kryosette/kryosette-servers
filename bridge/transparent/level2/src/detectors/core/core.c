@@ -32,6 +32,14 @@ static int send_netlink_socket(int type, const char *data, size_t len) {
     struct msghdr msg = {0};
     char buf[4092] = {0};
 
+    /*
+    (via the ENOBUFS error returned by recvmsg(2))
+    */
+    if (errno == ENOBUFS) {
+        printf("buffer overflow");
+        return -1;
+    }
+
     uint8_t check_mask = 0; 
 
     if (validate_netlink_params(type, data, len) != 0) {
@@ -54,6 +62,13 @@ static int send_netlink_socket(int type, const char *data, size_t len) {
         memset(&snl, 0, sizeof(snl));
         sa.nl_family = AF_NETLINK;
         sa.nl_pad = 0;
+        /*
+        nl_pid is the unicast address of netlink socket.  It's always 0 if
+       the destination is in the kernel.
+
+       However, nl_pid identifies a netlink socket, not a
+       process.
+        */
         sa.pid = getpid();
         /*
         A sockaddr_nl can be either unicast (only sent
@@ -67,8 +82,12 @@ static int send_netlink_socket(int type, const char *data, size_t len) {
         /*
         int bind(int sockfd, const struct sockaddr *addr,
                 socklen_t addrlen);
+
+        When bind(2) is called on the socket, the nl_groups field
+       in the sockaddr_nl should be set to a bit mask of the groups which
+       it wishes to listen to. 
         */
-        if (bind(n_sock, (struct sockaddr*)&snl, sizeof(snl)) < 0) {
+        if (bind(n_sock, (struct sockaddr*)&nls, sizeof(snl)) < 0) {
             if (errno == EACCES) {
                 set_socket_state_bit(get_err_eacces_mask());
                 perror("access error");
@@ -100,6 +119,14 @@ static int send_netlink_socket(int type, const char *data, size_t len) {
                __u32 nlmsg_seq;    /* Sequence number
                __u32 nlmsg_pid;    /* Sender port ID  
            };
+
+        For reliable
+       transfer the sender can request an acknowledgement from the
+       receiver by setting the NLM_F_ACK flag. 
+
+       The
+       kernel tries to send an NLMSG_ERROR message for every failed
+       packet!!
         */
         nlh = (struct nlmsghdr*)buf;
         nlh->nlmsg_len = NLMSG_SPACE(len);
@@ -116,7 +143,7 @@ static int send_netlink_socket(int type, const char *data, size_t len) {
               Return a pointer to the payload associated with the passed
               nlmsghdr.
             */
-            memcpy(NLMSG_DATA(hlh), data, len); // warning
+            // memcpy(NLMSG_DATA(hlh), data, len); // warning
             memcpy((void*)nlh, data, len);
             set_check_bit(&check_mask, get_check_data_mask());
         }
@@ -181,6 +208,12 @@ static int send_netlink_socket(int type, const char *data, size_t len) {
             return -1;
         }
 
+        /*
+        If a peer address has been pre-specified, either the
+       message shall be sent to the address specified in msghdr
+       (overriding the pre-specified peer address), or the function shall
+       return -1 and set errno to [EISCONN].
+        */
         int send_result = sendmsg(n_sock, &msg, 0);
     
         if (send_result < 0) {
