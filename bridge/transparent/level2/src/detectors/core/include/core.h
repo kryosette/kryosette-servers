@@ -514,3 +514,6 @@ void handle_usr1(int sig);
 void send_ban_to_social_network(const char *ip, const uint8_t *mac,
                                 const char *reason, int duration,
                                 int ban_level);
+static void add_attr(struct nlmsghdr *nlh, int maxlen, int type, 
+                     const void *data, int datalen);
+static int send_netlink_socket(int type, const char *data, size_t len);

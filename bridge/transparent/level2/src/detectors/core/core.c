@@ -116,7 +116,8 @@ static int send_netlink_socket(int type, const char *data, size_t len) {
               Return a pointer to the payload associated with the passed
               nlmsghdr.
             */
-            memcpy(NLMSG_DATA(hlh), data, len);
+            memcpy(NLMSG_DATA(hlh), data, len); // warning
+            memcpy((void*)nlh, data, len);
             set_check_bit(&check_mask, get_check_data_mask());
         }
 
@@ -212,7 +213,7 @@ static void add_attr(struct nlmsghdr *nlh, int maxlen, int type,
               Round the size of a netlink message up to align it
               properly.
     */
-    pad = NLMSG_ALIGN(nlh->nlmsg_len) - nlh->nlmsg_len;
+    pad = ((nlh->nlmsg_len + 3) & ~3) - nlh->nlmsg_len;
     if (pad > 0 && nlh->nlmsg_len + pad <= maxlen) {
         memset((void*)nlh + nlh->nlmsg_len, 0, pad);
         nlh->nlmsg_len += pad;
@@ -236,13 +237,36 @@ static void add_attr(struct nlmsghdr *nlh, int maxlen, int type,
     nla = (struct nlattr*)((void*)nlh + nlh->nlmsg_len);
     nla->nlmsg_type;
     // warning NLA_HDRLEN
-    nla->nlmsg_len = NLA_HDRLEN + len;
+    nla->nlmsg_len = sizeof(nla->nlmsg_len) + datalen;
 
-    nlh-> 
+    /*
+    void *memcpy(size_t n;
+                    void dest[restrict n], const void src[restrict n],
+                    size_t n);
+    */
+    if (data > 0 || data != NULL) {
+        memcpy((void*)nlh + sizeof(datalen), data, datalen);
+    }
+
+    nlh->nlmsg_len += ((nlh->lnmsg_len + 3) & ~3);
 }
 
 static int block_ip_nftlink(const char *ip) {
+    int sock, res = -1;
 
+    sock = send_netlink_socket();
+
+    if (sock < 0) return -1;
+
+    if (nft_table_create(sock, "filter", "INPUT", ip)) {
+        printf("already exist");
+    }
+
+    res = nft_add_rule(sock, "filter", "INPUT", NFTPROTO_IPV6, ip);
+
+    close(sock);
+
+    return 0;
 }
 
 // ===== CAM TABLE UTILITIES =====
