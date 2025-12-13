@@ -26,11 +26,52 @@ static int send_netlink_socket(int type, const char *data, size_t len) {
                __u32           nl_groups;  /* Multicast groups mask 
            };
     */
-    struct sockaddr_nl snl = {0};
-    struct nlmsghdr *nlh = {0};
-    struct iovec iov = {0};
-    struct msghdr msg = {0};
-    char buf[4092] = {0};
+    // struct sockaddr_nl snl;
+    // memset(&snl, 0, sizeof(snl));
+    // struct nlmsghdr *nlh = {0};
+    // struct iovec iov;
+    // memset(&iov, 0, sizeof(iov));
+    // struct msghdr msg;
+    // memset(&msg, 0, sizeof(msg));
+    // char buf[4092] = {0};
+
+    // // warning
+    // struct {
+    //     struct sockaddr_nl snl;
+    //     memset(&snl, 0, sizeof(snl));
+    //     struct nlmsghdr *nlh = {0};
+    //     struct iovec iov;
+    //     memset(&iov, 0, sizeof(iov));
+    //     struct msghdr msg;
+    //     memset(&msg, 0, sizeof(msg));
+    //     char buf[4092];
+    //     int fd, ret;
+    // } ctx = {
+    //     .snl.nl_family = AF_NETLINK,
+    //     .iov.iov_len = sizeof(ctx.buf),
+    //     .msg.msg_iov = &ctx.iov,
+    //     .msg.msg_iovlen = 1,
+    //     .fd = -1
+    // };
+
+    struct {
+        struct sockaddr_nl snl;
+        struct nlmsghdr *nlh;
+        struct iovec iov;
+        struct msghdr msg;
+        char buf[4092];
+        int fd;
+        int ret;
+    } ctx;
+
+    memset(&ctx, 0, sizeof(ctx));
+    ctx.snl.nl_family = AF_NETLINK;
+    ctx.iov.iov_base = ctx.buf;
+    ctx.iov.iov_len = sizeof(ctx.buf);  
+    ctx.msg.msg_iov = &ctx.iov;
+    ctx.msg.msg_iovlen = 1;
+    ctx.fd = -1;
+    
 
     /*
     (via the ENOBUFS error returned by recvmsg(2))
@@ -220,7 +261,10 @@ static int send_netlink_socket(int type, const char *data, size_t len) {
             if (errno == EISCONN) {
                 set_socket_state_bit(get_err_eisconn_mask());
                 printf("Сокет уже подключен\n");
-            } else {
+            } else if (errno == EPIPE) {
+                print("MSG_NOSIGNAL");
+            }
+            else {
                 set_socket_state_bit(get_err_sendmsg_mask());
                 perror("sendmsg error");
             }
