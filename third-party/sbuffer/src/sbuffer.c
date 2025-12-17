@@ -89,7 +89,9 @@ struct SafeBuffer* safe_buffer_create_struct(size_t element_size, size_t count) 
     buffer->element_size = element_size;
     buffer->capacity = count;
     buffer->data = calloc(count, element_size);
-    if (!buffer->data) { free(buffer); return NULL; }
+    if (!buffer->data) { 
+        free(buffer); return NULL; 
+    }
     buffer->magic = SAFE_BUFFER_MAGIC_VALUE;
     return buffer;
 }
@@ -128,7 +130,13 @@ bool safe_buffer_copy(struct SafeBuffer *dest, const struct SafeBuffer *src) {
     if (dest->type != src->type) return false;
     if (dest->element_size != src->element_size) return false;
     size_t bytes_to_copy = src->length * src->element_size;
-    if (bytes_to_copy > dest->capacity * dest->element_size) bytes_to_copy = dest->capacity * dest->element_size;
+    if (bytes_to_copy > dest->capacity * dest->element_size){
+        bytes_to_copy = dest->capacity * dest->element_size;
+    }
+
+    /*
+    void *memcpy(void *dest, const void *src, size_t n);
+    */
     memcpy(dest->data, src->data, bytes_to_copy);
     dest->length = bytes_to_copy / dest->element_size;
     if (dest->type == BUFFER_TYPE_CHAR) {
@@ -142,6 +150,7 @@ bool safe_buffer_copy(struct SafeBuffer *dest, const struct SafeBuffer *src) {
 void safe_buffer_destroy(struct SafeBuffer *buffer) {
     if (!buffer) return;
     unsigned long saved_magic = buffer->magic;
+    // warning
     buffer->magic = 0xDEADBEEF;
     if (saved_magic == SAFE_BUFFER_MAGIC_VALUE && buffer->data) {
         size_t bytes_to_wipe = buffer->capacity * buffer->element_size;
@@ -150,6 +159,7 @@ void safe_buffer_destroy(struct SafeBuffer *buffer) {
         free(buffer->data);
         buffer->data = NULL;
     }
+
     memset(buffer, 0, sizeof(struct SafeBuffer));
     free(buffer);
 }
