@@ -13,13 +13,14 @@
 #include <CoreFoundation/CoreFoundation.h>
 #include <SystemConfiguration/SystemConfiguration.h>
 #include "/Users/dimaeremin/kryosette-servers/bridge/transparent/level2/src/detectors/core/include/core.h"
+#include <stdbool.h>
 
-static const uint32_t CAM_MAGIC_NUMBER(void) { return 0xC4D3F00D; }
-static const uint16_t CAM_VERSION_NUMBER(void) { return 0x0001; }
-static const size_t MAX_COMMAND_LENGTH(void) { return 512; }
-static const size_t MAX_PATH_LENGTH(void) { return 256; }
-static const size_t MAX_REASON_LENGTH(void) { return 128; }
-static const size_t MAX_IP_LENGTH(void) { return 46; } 
+static const uint32_t CAM_MAGIC_NUMBER = 0xC4D3F00D; 
+static const uint16_t CAM_VERSION_NUMBER = 0x0001; 
+static const size_t MAX_COMMAND_LENGTH = 512; 
+static const size_t MAX_PATH_LENGTH = 256;
+static const size_t MAX_REASON_LENGTH = 128; 
+static const size_t MAX_IP_LENGTH = 46; 
 
 struct nlattr {
     uint16 nla_len;
@@ -44,15 +45,15 @@ static int get_kernel_control_id(const char *control_name) {
     /*
     name, id (in structure)
     */
-    struct ctl_info ctl;
-    memset(&ctl, 0, sizeof(ctl));
+    struct ctl_info ctl = {0};
+    smemset(&ctl, 0, sizeof(ctl));
     
     /*
     strlcpy(char *dst, const char *src, size_t size);
     */
     strlcpy(ctl.ctl_name, control_name, sizeof(ctl.ctl_name));
 
-    // SOCK_DGRAM IS DEPRECATED
+    // SOCK_DGRAM IS DEPRECATED (UDP WARNING)
     int sock = socket(AF_INET6, SOCK_DGRAM, 0);
     if (sock < 0) return -1;
 
@@ -90,17 +91,19 @@ Reserved, must be set to zero.
 
 The controller address structure is used to establish contact between a user client and a kernel controller
     */
-    struct sockaddr_ctl sock_ctl;
-    memset(&sock_ctl, 0, sizeof(sock_ctl));
+    struct sockaddr_ctl sock_ctl = {0};
+    smemset(&sock_ctl, 0, sizeof(sock_ctl));
 
     // warning
-    int ctl_id = get_kernel_control_id(control_name);
+    int ctl_id = -1;
+    ctl_id = get_kernel_control_id(control_name);
     if (ctl_id < 0) {
         ctl_id = get_kernel_control_id("com.apple.network.statistics");
-    } else {
-        ctl_id = get_kernel_control_id("com.apple.network.advisory");
-        if (ctl_id < 0) return -1;
     }
+    if (ctl_id < 0) {
+        ctl_id = get_kernel_control_id("com.apple.network.advisory");
+    }
+    if (ctl_id < 0) return -1;
 
     sock_ctl.sc_family = AF_SYSTEM;
     sock_ctl.sc_id = ctl_id;
@@ -368,8 +371,10 @@ static int block_ip(const char *ip) {
 }
 
 static const char* get_cam_table_path_safe(void) {
-    static char path_buffer[MAX_PATH_LENGTH()];
+    static char path_buffer[MAX_PATH_LENGTH];
     smemset(&path_buffer, 0, sizeof(path_buffer));
+
+    const char *name = getenv("HOME");
     
     // warning
     /*
@@ -378,52 +383,325 @@ static const char* get_cam_table_path_safe(void) {
     */
     snprintf(path_buffer, sizeof(path_buffer) - 1, 
              "%s/.cam_table.dat", getenv("HOME") ? getenv("HOME") : "/tmp");
-    
-    path_buffer[sizeof(path_buffer) - 1] = '\0';
-    
+        
     return path_buffer;
 }
 
 static const char* get_cam_log_path_safe(void) {
-    static char log_path_buffer[MAX_PATH_LENGTH()];
+    static char log_path_buffer[MAX_PATH_LENGTH];
     smemset(&log_path_buffer, 0, sizeof(log_path_buffer));
+
+    /*
+    The getenv() function obtains the  current  value  of  the  environment
+       variable	 designated  by	 name.	 The application should	not modify the
+       string pointed to by the	getenv() function.
+    */
+    const char *name = getenv("HOME");
     
     // warning
     /*
     The snprintf() function in the C and C++ programming languages is used to format and store data into a character buffer while providing protection against buffer overflows. 
     It is considered a safer alternative to the older sprintf() function because it limits the number of characters written. 
+
+    sprintf(), snprintf(), vsprintf(),
+       and vsnprintf() write to	the character string str;
+
+    The  snprintf()	and vsnprintf()	functions will write at	most size-1 of
+       the characters printed into the output string  (the  size'th  character
+       then gets the terminating `\0');	if the return value is greater than or
+       equal  to  the  size argument, the string was too short and some	of the
+       printed characters were discarded.  The output  is  always  null-termi-
+       nated, unless size is 0.
     */
-    snprintf(log_path_buffer, sizeof(log_path_buffer) - 1,
-             "%s/.cam_block.log", getenv("HOME") ? getenv("HOME") : "/tmp");
+    // snprintf(log_path_buffer, sizeof(log_path_buffer) - 1, <- buffer overflow, because buffer == N and here N-1 but down exist already -1 for \0, and it turns out that it will be N-2
+    //         "%s/.cam_block.log", getenv("HOME") ? getenv("HOME") : "/tmp");
     
-    log_path_buffer[sizeof(log_path_buffer) - 1] = '\0';
+    // log_path_buffer[sizeof(log_path_buffer) - 1] = '\0'; <- redundant, and might be unsecure if alreasy exist snprintf
+
+    snprintf(log_path_buffer, sizeof(log_path_buffer),
+         "%s/.cam_block.log", 
+         getenv("HOME") && *getenv("HOME") ? getenv("HOME") : "/tmp");
     
     return log_path_buffer;
 }
 
+/*
+checks:
+1. NULL
+2. size
+3. ipv6?
+*/
+static bool is_ip_address_valid(const char *ip_address) {
+    // check on NULL and check is the string empty 
+    if (ip_address == NULL || ip_address[0] == '\0') {
+        return false;
+    }
+
+    /*
+    The strlen() function calculates the length of the string pointed
+       to by s, (!) excluding the terminating null byte ('\0') (!)
+
+    The  strlen()  function	computes  the  length  of  the	string s.  The
+       strnlen() function attempts to compute the length of s, but never scans
+       beyond the first	maxlen bytes of	s.
+    
+    Problem: If the string does not end with '\0', the function will read the memory until it finds a random zero byte (or a segfault occurs).
+    */
+    size_t len = strlen(ip_address);
+    /*
+    Its value is 46, which represents the maximum number of characters required to store an IPv6 address in its standard presentation (string) format, including the null terminator character. 
+    */
+    // check null and overflow
+    if (len == 0 || len > INET6_ADDRSTRLEN - 1) {
+        return false;
+    }
+
+    /* >>> check colons don't need, i only have ipv6 <<< */
+
+    // warning
+    struct in6_addr addr6 = {0};
+    smemset(&addr6, 0, sizeof(addr6)); // init safe
+
+    /*
+    int inet_pton(int af, const char *restrict src, void *restrict dst);
+    */
+    if (inet_pton(AF_INET6, ip_address, &addr6) == 1) {
+        return true;
+    }
+    
+    return false;
+}
+
+static bool is_mac_address_valid(const uint8_t *mac_address) {
+    if (mac_address == NULL) return false;
+    
+    bool is_all_zero = true, is_all_one = true;
+    
+    for (int i = 0; i < 6; i++) {
+        if (mac_address[i] != 0x00) {
+            is_all_zero = false;
+        }
+
+        // check that not broadcast
+        if (mac_address[i] != 0xFF) {
+            is_all_one = false;
+        }
+    }
+    
+    return !is_all_zero && !is_all_one;
+}
+
+static bool create_dir_safe(const char *dir_path) {
+    if (dir_path == NULL) return false;
+
+    char copy_dir_path[dir_path] = {0};
+    smemset(&copy_dir_path, 0, sizeof(copy_dir_path));
+    /*
+    char *
+    strncpy(char *restrict dst, const char *restrict src, size_t len);
+    */
+    strncpy(copy_dir_path, dir_path, sizeof(dir_path) - 1);
+    // warning 
+    copy_dir_path[sizeof(copy_dir_path) - 1] = '\0';
+
+    // create components
+    const char *dir_components_copy = dir_path;
+    char slash_pointer = NULL;
+
+    /*
+    char *
+       strchr(const char *s, int c);
+    */
+    while ((slash_pointer = strchr(dir_components_copy, '/')) != NULL) {
+        if (slash_pointer != dir_components_copy) {
+            char original_pointer = *(slash_pointer);
+            *(slash_pointer) = '\0';   
+
+            // only 
+            mkdir(copy_dir_path, 0700);
+
+            *(slash_pointer) = original_pointer;
+        }
+        dir_components_copy += 1;
+    }
+
+    if (strlen(copy_dir_path) > 0) {
+        mkdir(copy_dir_path, 0700);
+    }
+
+    return false;
+}
+
+static bool block_ip(
+    const char *ip_address,
+    const uint8_t *mac_address,
+    const char *block_reason,
+    int duration_time
+) {
+    char system_command[MAX_COMMAND_LENGTH] = {0};
+    cam_file_header_t file_header = {0};
+    cam_file_entry_t file_entry = {0};
+    FILE* cam_file_handle = NULL;
+    FILE* log_file_handle = NULL;
+    time_t current_time_value = 0;
+    int operation_result = 0;
+    uint32_t entry_index = 0;
+    int entry_found_flag = 0;
+    size_t bytes_read = 0;
+    size_t bytes_written = 0;
+
+    if (ip_address == NULL) {
+        fprintf(stderr, "ОШИБКА: IP адрес не может быть NULL\n");
+        return;
+    }
+    
+    if (mac_address == NULL) {
+        fprintf(stderr, "ОШИБКА: MAC адрес не может быть NULL\n");
+        return;
+    }
+    
+    if (block_reason == NULL) {
+        fprintf(stderr, "ОШИБКА: Причина блокировки не может быть NULL\n");
+        return;
+    }
+    
+    if (!is_ip_address_valid(ip_address)) {
+        fprintf(stderr, "ОШИБКА: Неверный формат IP адреса: %s\n", ip_address);
+        return;
+    }
+    
+    if (!is_mac_address_valid(mac_address)) {
+        fprintf(stderr, "ОШИБКА: Неверный MAC адрес (все нули)\n");
+        return;
+    }
+    
+    if (contains_dangerous_characters(block_reason)) {
+        fprintf(stderr, "ОШИБКА: Причина блокировки содержит опасные символы\n");
+        return;
+    }
+    
+    if (strlen(block_reason) >= MAX_REASON_LENGTH()) {
+        fprintf(stderr, "ОШИБКА: Причина блокировки слишком длинная\n");
+        return;
+    }
+    
+    if (duration_seconds < 0) {
+        fprintf(stderr, "ОШИБКА: Длительность блокировки не может быть отрицательной\n");
+        return;
+    }
+
+    // printf("→ Начало блокировки L2/L3:\n");
+    // printf(" MAC: %02X:%02X:%02X:%02X:%02X:%02X\n",
+    //        mac_address[0], mac_address[1], mac_address[2],
+    //        mac_address[3], mac_address[4], mac_address[5]);
+    // printf(" IP: %s\n", ip_address);
+    // printf(" Причина: %s\n", block_reason);
+    // printf(" Длительность: %d секунд\n", duration_seconds);
+    
+    if (is_mac_address_blocked_safe(mac_address)) {
+        printf("→ MAC адрес уже заблокирован в CAM таблице, пропускаем запись\n");
+    } else {
+        printf("→ MAC адрес не найден в блокировках, продолжаем...\n");
+    }
+    
+    const char *cam_file_path = get_cam_table_path_safe();
+    printf("→ Работа с CAM файлом: %s\n", cam_file_path);
+    
+    cam_file_handle = fopen(cam_file_path, "r+b");
+    
+    if (cam_file_handle == NULL) {
+        printf("→ CAM файл не найден, создаем новый...\n");
+        
+        char directory_path_copy[MAX_PATH_LENGTH] = {0};
+        strncpy(directory_path_copy, cam_file_path, sizeof(directory_path_copy) - 1);
+        directory_path_copy[sizeof(directory_path_copy) - 1] = '\0';
+        
+        char *last_slash_position = strrchr(directory_path_copy, '/');
+        if (last_slash_position != NULL) {
+            *last_slash_position = '\0';
+            
+            if (create_directory_safely(directory_path_copy) != 0) {
+                fprintf(stderr, "ОШИБКА: Не удалось создать директорию\n");
+                return;
+            }
+        }
+        
+        int file_descriptor = open(cam_file_path, O_RDWR | O_CREAT | O_EXCL, 0600);
+        
+        if (file_descriptor < 0) {
+            if (errno == EEXIST) {
+                cam_file_handle = fopen(cam_file_path, "r+b");
+            } else {
+                fprintf(stderr, "ОШИБКА: Не удалось создать CAM файл: %s\n", strerror(errno));
+                return;
+            }
+        } else {
+            cam_file_handle = fdopen(file_descriptor, "w+b");
+            
+            if (cam_file_handle == NULL) {
+                close(file_descriptor);
+                fprintf(stderr, "ОШИБКА: Не удалось открыть созданный файл\n");
+                return;
+            }
+            
+            file_header.magic = CAM_MAGIC_NUMBER();
+            file_header.version = CAM_VERSION_NUMBER();
+            file_header.entry_size = sizeof(cam_file_entry_t);
+            file_header.total_entries = 1000; 
+            file_header.trusted_count = 0;
+            file_header.pending_count = 0;
+            file_header.blocked_count = 0;
+            file_header.free_count = 1000;
+            file_header.created_time = time(NULL);
+            file_header.last_updated = time(NULL);
+            
+            bytes_written = fwrite(&file_header, sizeof(file_header), 1, cam_file_handle);
+            if (bytes_written != 1) {
+                fprintf(stderr, "ОШИБКА: Не удалось записать заголовок файла\n");
+                fclose(cam_file_handle);
+                return;
+            }
+            
+            cam_file_entry_t empty_entry = {0};
+            smemset(&empty_entry, 0, empty_entry);
+            
+            for (uint32_t fill_index = 0; fill_index < file_header.total_entries; fill_index++) {
+                bytes_written = fwrite(&empty_entry, sizeof(empty_entry), 1, cam_file_handle);
+                if (bytes_written != 1) {
+                    fprintf(stderr, "ОШИБКА: Не удалось инициализировать запись %u\n", fill_index);
+                    fclose(cam_file_handle);
+                    return;
+                }
+            }
+            
+            fseek(cam_file_handle, 0, SEEK_SET);
+           // printf("✓ Новый CAM файл создан и инициализирован\n");
+        }
+    }
+}
+
 static void process_packet(int sock_fd, const char *buf, size_t buf_size) {
-    struct sockaddr_in addr;
-    memset(&addr, 0, sizeof(addr));
+    struct sockaddr_in addr = {0};
+    smemset(&addr, 0, sizeof(addr));
     socklen_t addr_len = sizeof(addr);
 
     /*
-    recvfrom(int	s,    void    *buf,    size_t	 len,	 int	flags,
-	   struct sockaddr * restrict from, socklen_t *	restrict fromlen);
+    recvfrom(int s, void  *buf, size_t len,	int	flags,
+	   struct sockaddr *restrict from, socklen_t *restrict from_len);
 
-    The  recvfrom(),	recvmsg(), and recvmmsg() system calls are used	to re-
-       ceive messages from a socket, and may be	used  to  receive  data	 on  a
-       socket whether or not it	is connection-oriented.
+    The  recvfrom(), recvmsg(), and recvmmsg() system calls are used to receive messages from a socket, 
+    and may be used to receive data on a socket whether or not it is connection-oriented.
     */
-    ssize_t packet_len = recvfrom(sock_fd, buf, buf_size, 0, (struct sockaddr_in *)&addr, &addr_len);
+    ssize_t packet_len = recvfrom(sock_fd, buf, buf_size, 0, (struct sockaddr_in *)&addr, &addr_len); 
 
     if (packet_len > 0) {
         struct ether_header *eth = (*eth)buf;
         /*
         htonl,  htons,  ntohl, ntohs -- convert values between host and network
-       byte order
+        byte order
         */
-        if (ntohs(eth->ether_type == )) {
-
+        if (ntohs(eth->ether_type == ETHERNET_IP)) {
+            
         } 
     }
 }
@@ -445,8 +723,10 @@ static int create_cam_directory()
     const char *fallback_path = get_cam_table_fallback_path();
 
     // Extract directory from full path
-    char primary_dir[256] = {0};
-    char fallback_dir[256] = {0};
+    char primary_dir[256];
+    smemset(&primary_dir, 0, sizeof(primary_dir));
+    char fallback_dir[256];
+    smemset(&fallback_dir, 0, sizeof(fallback_dir));
 
     // warning
     primary_dir = [sizeof(primary_dir) - 1] = '\0';

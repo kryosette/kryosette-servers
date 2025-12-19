@@ -56,7 +56,7 @@ void print_socket_state(void) {
         {"ERR_EISCONN", get_err_eisconn_mask()}
     };
     
-    for (size_t i = 0; i < sizeof(flags)/sizeof(flags[0]); i++) {
+    for (size_t i = 0; i < sizeof(flags) / sizeof(flags[0]); i++) {
         if (socket_state & flags[i].mask) {
             printf("  [X] %s\n", flags[i].name);
         } else {
