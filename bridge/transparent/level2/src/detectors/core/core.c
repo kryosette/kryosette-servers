@@ -1106,7 +1106,7 @@ void send_ban_to_social_network(const char *ip, const uint8_t *mac,
 }
 
 /*
-  unblock device
+  unblock device 
 */
 void unblock_device(const char *ip, const uint8_t *mac,
                     const char *reason, int duration,
