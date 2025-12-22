@@ -550,13 +550,8 @@ static bool block_ip(
     size_t bytes_read = 0;
     size_t bytes_written = 0;
 
-    if (ip_address == NULL) {
+    if (ip_address == NULL || mac_address == NULL) {
         fprintf(stderr, "ОШИБКА: IP адрес не может быть NULL\n");
-        return;
-    }
-    
-    if (mac_address == NULL) {
-        fprintf(stderr, "ОШИБКА: MAC адрес не может быть NULL\n");
         return;
     }
     
@@ -565,13 +560,8 @@ static bool block_ip(
         return;
     }
     
-    if (!is_ip_address_valid(ip_address)) {
+    if (!is_ip_address_valid(ip_address) || !is_mac_address_valid(mac_address)) {
         fprintf(stderr, "ОШИБКА: Неверный формат IP адреса: %s\n", ip_address);
-        return;
-    }
-    
-    if (!is_mac_address_valid(mac_address)) {
-        fprintf(stderr, "ОШИБКА: Неверный MAC адрес (все нули)\n");
         return;
     }
     
@@ -580,13 +570,8 @@ static bool block_ip(
         return;
     }
     
-    if (strlen(block_reason) >= MAX_REASON_LENGTH()) {
+    if (strlen(block_reason) >= MAX_REASON_LENGTH() || duration_seconds < 0) {
         fprintf(stderr, "ОШИБКА: Причина блокировки слишком длинная\n");
-        return;
-    }
-    
-    if (duration_seconds < 0) {
-        fprintf(stderr, "ОШИБКА: Длительность блокировки не может быть отрицательной\n");
         return;
     }
 
@@ -613,9 +598,20 @@ static bool block_ip(
         printf("→ CAM файл не найден, создаем новый...\n");
         
         char directory_path_copy[MAX_PATH_LENGTH] = {0};
+        smemset(&directory_path_copy, 0, sizeof(directory_path_copy));
         strncpy(directory_path_copy, cam_file_path, sizeof(directory_path_copy) - 1);
+        // warning
         directory_path_copy[sizeof(directory_path_copy) - 1] = '\0';
         
+        /*
+        The strchr() function locates the first occurrence of c (converted to a
+        char) in	the string pointed to by s.  The terminating null character is
+        considered  part	 of  the string; therefore if c	is `\0', the functions
+        locate the terminating `\0'.
+
+        The strrchr() function is identical to strchr() except it  locates  the
+        last occurrence of c
+        */
         char *last_slash_position = strrchr(directory_path_copy, '/');
         if (last_slash_position != NULL) {
             *last_slash_position = '\0';
@@ -743,6 +739,7 @@ static int create_cam_directory()
     char *primary_slash = strrchr(primary_dir, '/');
     char *fallback_slash = strrchr(fallback_dir, '/');
 
+    // warning
     if (primary_slash)
         *primary_slash = '\0';
     if (fallback_slash)
