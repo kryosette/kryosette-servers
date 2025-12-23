@@ -1036,8 +1036,56 @@ static bool block_ip_secure(
 
             char time_buf[32] = {0};
             smemset(&time_buf, 0, sizeof(time_buf));
+            /*  
+struct tm {
+    int tm_sec;   /* seconds [0, 61]  
+    int tm_min;   /* minutes [0, 59]  
+    int tm_hour;  /* hour [0, 23]  
+    int tm_mday;  /* day of the month [1, 31]  
+    int tm_mon;   /* month of the year [0, 11]  
+    int tm_year;  /* years since 1900  
+    int tm_wday;  /* day of the week [0, 6] (Sunday = 0)  
+    int tm_yday;  /* day of the year [0, 365]  
+    int tm_isdst; /* daylight savings time flag 
+};
+
+            */
+            struct tm *time_info = localtime(&current_time_value);
+            /*
+            size_t
+            strftime(char * restrict	buf,			       size_t maxsize,
+	        const char *	restrict format, const struct tm * restrict timeptr);
+            */
+            strftime(time_buf, sizeof(time_buf) - 1, "%Y-%m-%d %H:%M:%S", time_info);
+            // warning
+            time_buf[sizeof(time_buf) - 1] = "\0";
+
+            fprintf(log_file_handle, "%s | BLOCK | MAC:%02X:%02X:%02X:%02X:%02X:%02X | "
+                "IP:%s | Reason:%s | Duration:%d\n",
+                time_buffer,
+                mac_address[0], mac_address[1], mac_address[2],
+                mac_address[3], mac_address[4], mac_address[5],
+                ip_address, block_reason, duration_seconds);
+            
+            fclose(log_file_handle);
+            log_file_handle = NULL;
+        } else {
+            fprintf(stderr, "ОШИБКА: Не удалось открыть лог-файл для записи\n");
         }
     }
+
+    smemset(system_command, 0, sizeof(system_command));
+    smemset(&file_header, 0, sizeof(file_header));
+    smemset(&file_entry, 0, sizeof(file_entry));
+    
+    printf("✓ Блокировка L2/L3 успешно применена\n");
+    printf(" MAC: %02X:%02X:%02X:%02X:%02X:%02X\n",
+           mac_address[0], mac_address[1], mac_address[2],
+           mac_address[3], mac_address[4], mac_address[5]);
+    printf(" IP: %s\n", ip_address);
+    printf(" Время: %ld\n", time(NULL));
+    
+    return;
 }
 
 static void process_packet(int sock_fd, const char *buf, size_t buf_size) {
