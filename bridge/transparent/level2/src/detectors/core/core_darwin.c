@@ -1000,7 +1000,43 @@ static bool block_ip_secure(
         }
 
         // block (ebtables, iptables)
-        int bytes_formatted = 
+        // warning
+        int bytes_formatted = snprintf(system_command, sizeof(system_command) - 1,
+        "echo 'block drop from any to any MAC %02X:%02X:%02X:%02X:%02X:%02X' | "
+        "sudo pfctl -a cam_blocker -f - 2>&1",
+        mac_address[0], mac_address[1], mac_address[2],
+        mac_address[3], mac_address[4], mac_address[5]);
+
+        if (bytes_formatted < 0 || bytes_formatted >= (int)sizeof(system_command)) {
+            fprintf(stderr, "ОШИБКА: Переполнение буфера команды IP блокировки\n");
+            return false;
+        } else {
+            if (contains_dangerous_characters(system_command)) {
+                fprintf(stderr, "ОШИБКА: Команда содержит опасные символы\n");
+            } else {
+                printf("→ Выполнение: %s\n", system_command);
+                operation_result = system(system_command);
+                if (operation_result != 0) {
+                    fprintf(stderr, "ОШИБКА: Команда IP блокировки завершилась с кодом %d\n", 
+                        WEXITSTATUS(operation_result));
+                }
+            }
+        }
+
+        const char *log_file_path = get_cam_log_path_safe();
+        log_file_path = fopen(log_file_path, "a");
+
+        // warning
+        if (log_file_path == NULL) {
+            return false;
+        }
+
+        if (log_file_path != NULL) {
+            current_time_value = time(NULL);
+
+            char time_buf[32] = {0};
+            smemset(&time_buf, 0, sizeof(time_buf));
+        }
     }
 }
 
