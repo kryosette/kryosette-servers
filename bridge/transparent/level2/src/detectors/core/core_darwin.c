@@ -27,6 +27,143 @@ struct nlattr {
     uint16 nla_type;
 };
 
+static int is_file_header_valid(const cam_file_header_t* header) {
+    if (header == NULL) {
+        return 0;
+    }
+    
+    if (header->magic != CAM_MAGIC_NUMBER()) {
+        fprintf(stderr, "ОШИБКА ЦЕЛОСТНОСТИ: Неверное магическое число: 0x%08X\n", 
+                header->magic);
+        return 0;
+    }
+    
+    if (header->version != CAM_VERSION_NUMBER()) {
+        fprintf(stderr, "ОШИБКА ЦЕЛОСТНОСТИ: Неподдерживаемая версия: 0x%04X\n", 
+                header->version);
+        return 0;
+    }
+    
+    if (header->entry_size != sizeof(cam_file_entry_t)) {
+        fprintf(stderr, "ОШИБКА ЦЕЛОСТНОСТИ: Неверный размер записи: %u (ожидалось %zu)\n",
+                header->entry_size, sizeof(cam_file_entry_t));
+        return 0;
+    }
+    
+    if (header->total_entries == 0 || header->total_entries > 1000000) {
+        fprintf(stderr, "ОШИБКА ЦЕЛОСТНОСТИ: Недопустимое количество записей: %u\n",
+                header->total_entries);
+        return 0;
+    }
+    
+    uint32_t calculated_total = header->trusted_count + header->pending_count + 
+                               header->blocked_count + header->free_count;
+    
+    if (calculated_total != header->total_entries) {
+        fprintf(stderr, "ОШИБКА ЦЕЛОСТНОСТИ: Несогласованные счетчики записей\n");
+        fprintf(stderr, " trusted=%u + pending=%u + blocked=%u + free=%u = %u, total=%u\n",
+                header->trusted_count, header->pending_count,
+                header->blocked_count, header->free_count,
+                calculated_total, header->total_entries);
+        return 0;
+    }
+    
+    time_t current_time = time(NULL);
+    
+    if (header->created_time > current_time + 3600) { 
+        fprintf(stderr, "ОШИБКА ЦЕЛОСТНОСТИ: Время создания в будущем: %ld\n",
+                header->created_time);
+        return 0;
+    }
+    
+    if (header->last_updated > current_time + 3600) {
+        fprintf(stderr, "ОШИБКА ЦЕЛОСТНОСТИ: Время обновления в будущем: %ld\n",
+                header->last_updated);
+        return 0;
+    }
+    
+    if (header->last_updated < header->created_time) {
+        fprintf(stderr, "ОШИБКА ЦЕЛОСТНОСТИ: last_updated < created_time\n");
+        return 0;
+    }
+    
+    return 1;
+}
+
+static int is_file_entry_valid(const cam_file_entry_t* entry, uint32_t index) {
+    if (entry == NULL) {
+        return 0;
+    }
+    
+    if (entry->status > ENTRY_STATUS_TRUSTED) {
+        fprintf(stderr, "ОШИБКА ЦЕЛОСТНОСТИ: Неверный статус записи %u: %d\n",
+                index, entry->status);
+        return 0;
+    }
+    
+    time_t current_time = time(NULL);
+    
+    if (entry->status != ENTRY_STATUS_FREE) {
+        if (entry->last_seen > current_time + 3600) {
+            fprintf(stderr, "ОШИБКА ЦЕЛОСТНОСТИ: Запись %u: last_seen в будущем\n", index);
+            return 0;
+        }
+        
+        if (entry->block_time > current_time + 3600) {
+            fprintf(stderr, "ОШИБКА ЦЕЛОСТНОСТИ: Запись %u: block_time в будущем\n", index);
+            return 0;
+        }
+        
+        if (entry->status == ENTRY_STATUS_BLOCKED && entry->block_duration < 0) {
+            fprintf(stderr, "ОШИБКА ЦЕЛОСТНОСТИ: Запись %u: отрицательная длительность блокировки\n",
+                    index);
+            return 0;
+        }
+        
+        if (!is_mac_address_valid(entry->mac)) {
+            fprintf(stderr, "ОШИБКА ЦЕЛОСТНОСТИ: Запись %u: невалидный MAC адрес\n", index);
+            return 0;
+        }
+        
+        if (entry->vlan_id > 4095) {
+            fprintf(stderr, "ОШИБКА ЦЕЛОСТНОСТИ: Запись %u: неверный VLAN ID: %u\n",
+                    index, entry->vlan_id);
+            return 0;
+        }
+        
+        if (entry->status == ENTRY_STATUS_BLOCKED && 
+            strlen(entry->ip_address) > 0) {
+            if (!is_ip_address_valid(entry->ip_address)) {
+                fprintf(stderr, "ОШИБКА ЦЕЛОСТНОСТИ: Запись %u: невалидный IP адрес: %s\n",
+                        index, entry->ip_address);
+                return 0;
+            }
+        }
+        
+        if (entry->status == ENTRY_STATUS_BLOCKED &&
+            strlen(entry->reason) > MAX_REASON_LENGTH()) {
+            fprintf(stderr, "ОШИБКА ЦЕЛОСТНОСТИ: Запись %u: слишком длинная причина\n", index);
+            return 0;
+        }
+    } else {
+        for (int i = 0; i < 6; i++) {
+            if (entry->mac[i] != 0x00) {
+                fprintf(stderr, "ОШИБКА ЦЕЛОСТНОСТИ: Запись %u: MAC не нулевой в свободной записи\n",
+                        index);
+                return 0;
+            }
+        }
+        
+        if (entry->vlan_id != 0) {
+            fprintf(stderr, "ОШИБКА ЦЕЛОСТНОСТИ: Запись %u: VLAN не нулевой в свободной записи\n",
+                    index);
+            return 0;
+        }
+    }
+    
+    return 1;
+}
+
 static int create_osx_system_socket(void) {
     // DGRAM IS DECPRECATED
     int sock = socket(AF_INET6, SOCK_DGRAM, 0);
@@ -532,7 +669,7 @@ static bool create_dir_safe(const char *dir_path) {
     return false;
 }
 
-static bool block_ip(
+static bool block_ip_secure(
     const char *ip_address,
     const uint8_t *mac_address,
     const char *block_reason,
@@ -671,8 +808,199 @@ static bool block_ip(
             }
             
             fseek(cam_file_handle, 0, SEEK_SET);
-           // printf("✓ Новый CAM файл создан и инициализирован\n");
         }
+
+        /*
+        BLOCK FILE FOR
+        
+        #define	 LOCK_SH	0x01	  /* shared file lock  
+        #define	 LOCK_EX	0x02	  /* exclusive file lock  
+        #define	 LOCK_NB	0x04	  /* do	not block when locking  
+        #define	 LOCK_UN	0x08	  /* unlock file  
+
+        int
+        flock(int fd, int operation);
+        */
+        if (cam_file_handle != NULL) {
+            int lock_file = flock(fileno(cam_file_handle), LOCK_EX); // exclusive file lock 
+            if (lock_file < 0) {
+                fprintf("lock_file");
+                fclose(lock_file);
+                return;
+            }
+
+            /*
+            int
+            fseek(FILE *stream, long	offset,	int whence);
+            */
+            fseek(cam_file_handle, 0, SEEK_SET);
+            /*
+            size_t
+            fread(void   *	restrict   ptr,	   size_t    size,    size_t	nmemb,
+	        FILE	* restrict stream);
+            */
+            bytes_read = fread(&cam_file_handle, sizeof(cam_file_handle), 1, cam_file_handle);
+            if (bytes_read != 1) {
+                fprintf("not bytes_read");
+                flock(fileno(cam_file_handle), LOCK_UN);
+                fclose(cam_file_handle);
+                return;
+            }
+
+            if (!is_file_header_valid(&file_header)) {
+                fprintf(stderr, "ОШИБКА: Заголовок CAM файла поврежден\n");
+
+                /*
+                int
+                fseek(FILE *stream, long	offset,	int whence);
+
+                The fseek() function sets the file position indicator  for  the	stream
+       pointed to by stream.  The new position,	measured in bytes, is obtained
+       by  adding offset bytes to the position specified by whence.  If	whence
+       is set to SEEK_SET, SEEK_CUR, or	SEEK_END, the offset  is  relative  to
+       the  start of the file, the current position indicator, or end-of-file,
+       respectively.  A	successful call	to the	fseek()	 function  clears  the
+       end-of-file  indicator  for  the	 stream	 and undoes any	effects	of the
+       ungetc(3) and ungetwc(3)	functions on the same stream.
+
+       The ftell() function obtains the	current	value of the file position in-
+       dicator for the stream pointed to by stream.
+
+                "int fileno(FILE *stream);"
+                FILE (highlevel thread) -> fd (int)
+                (!) Converts FILE* (high-level stream) to a file descriptor (low-level int) 
+                It is needed for flock() and ftruncate(), which work with descriptors (!)
+
+                stream - file stream
+                offset - offset in bytes
+                whence - where to read the offset from:
+
+                SEEK_SET (0) - from the beginning of the file
+                SEEK_CUR (1) - from the current position
+                SEEK_END (2) - from the end of the file
+
+                briefly: we find out the file size, then we return to read the data.
+                */
+                fseek(cam_file_handle, 0, SEEK_END);
+                long file_size = ftell(cam_file_handle); 
+                fseek(cam_file_handle, sizeof(file_header), SEEK_SET);
+
+                if (file_size < (long)sizeof(file_header)) {
+                    fprintf(stderr, "Файл слишком маленький (%ld байт), возможно поврежден\n", file_size);
+                } else if (file_header.total_entries == 0) {
+                    fprintf(stderr, "Нулевое количество записей в заголовке\n");
+                }
+            
+                flock(fileno(cam_file_handle), LOCK_UN);
+                fclose(cam_file_handle);
+                return;
+            }
+
+            // warning
+            if (file_header.magic != CAM_MAGIC_NUMBER()) {
+                printf("not magic");
+                flock(fileno(cam_file_handle), LOCK_UN);
+                fclose(cam_file_handle);
+                return;
+            }
+
+            if (file_header.version != CAM_VERSION_NUMBER()) {
+                printf("not version");
+                flock(fileno(cam_file_handle), LOCK_UN);
+                fclose(cam_file_handle);
+                return;
+            }
+
+            /*
+            We are looking for a free record or a record with the same MAC 
+            */
+            entry_found_flag = 0;
+            for (int i = 0; i < file_header.entry_size; i++) {
+                bytes_read = fread(&file_entry, sizeof(file_entry), 1, cam_file_handle);
+                if (bytes_read != 1) {
+                    fprintf(stderr, "ОШИБКА: Не удалось прочитать запись %u\n", entry_index);
+                    break;
+                }
+
+                if (file_entry.status == ENTRY_STATUS_FREE) {
+                    entry_found_flag = 1;
+                    printf("✓ Найдена свободная запись (индекс %u)\n", entry_index);
+                    break;
+                /*
+                The same MAC address can exist on different VLANs.
+                */
+                } else if (memcmp(file_entry.mac, mac_address, 6) == 0 && file_entry.vlan_id == 1) {
+                    entry_found_flag = 1;
+                    printf("✓ Найдена существующая запись (индекс %u)\n", entry_index);
+                    break;
+                }
+            }
+
+            if (entry_found_flag) {
+                memcpy(file_entry.mac, mac_address, 6);
+                file_entry.vlan_id = 1;
+                file_entry.status = ENTRY_STATUS_BLOCKED;
+                file_entry.last_seen = time(NULL);
+                file_entry.block_time = time(NULL);
+                file_entry.block_duration = duration_seconds;
+
+                // warning
+                strncpy(file_entry.ip_address, ip_address, sizeof(file_entry.ip_address) - 1);
+                file_entry.ip_address[sizeof(file_entry.ip_address) - 1] = '\0';
+
+                // warning
+                strncpy(file_entry.reason, block_reason, sizeof(file_entry.reason) - 1);
+                file_entry.reason[sizeof(file_entry.reason) - 1] = '\0';
+
+                /*
+                This is a calculation of the position of a specific record in a file. (!) from the beginning of the file
+
+                change file_entry (!)
+
+                int
+                fseek(FILE *stream, long	offset,	int whence);
+                */
+                fseek(cam_file_handle, sizeof(file_header) + entry_index * sizeof(file_entry), SEEK_SET);
+
+                /*
+                size_t
+                fwrite(const  void  *  restrict	ptr,  size_t   size,   size_t	nmemb,
+	            FILE	* restrict stream);
+
+                fwrite(&file_entry, sizeof(file_entry), ...) will record exactly the changes that I made to the file_entry structure in memory, 
+                at the address in the file where the current position (fseek) points 
+
+                nmemb - count of elements for write\read
+                */
+                bytes_written = fwrite(&file_entry, sizeof(file_entry), 1, cam_file_handle);
+                if (bytes_written != 1) {
+                    // need stats
+                    fprintf(stderr, "ОШИБКА: Не удалось записать обновленную запись\n");
+                } else {
+                    file_header.blocked_count++;
+                    if (file_entry.status == ENTRY_STATUS_FREE) {
+                        file_header.free_count--;
+                    }
+                    file_header.last_updated = time(NULL);
+                
+                    fseek(cam_file_handle, 0, SEEK_SET);
+                    fwrite(&file_header, sizeof(file_header), 1, cam_file_handle);
+                
+                    printf("✓ Запись успешно сохранена в CAM таблице\n");
+                    printf(" Статистика: заблокировано %u MAC, свободно %u записей\n",
+                       file_header.blocked_count, file_header.free_count);
+                }
+            } else {
+                fprintf(stderr, "ОШИБКА: Не найдено свободного места в CAM таблице\n");
+            }
+
+            flock(fileno(cam_file_handle), LOCK_UN);
+            fclose(cam_file_handle);
+            cam_file_handle = NULL;
+        }
+
+        // block (ebtables, iptables)
+        int bytes_formatted = 
     }
 }
 
@@ -785,8 +1113,6 @@ static int create_cam_directory()
     fprintf(stderr, "Failed to create both directories\n");
     return -1;
 }
-
-static int setup_bpf
 
 static int create_osx_socket_data(int type, const char *data, size_t len) {
     static int osx_sock = -1; // initial value
