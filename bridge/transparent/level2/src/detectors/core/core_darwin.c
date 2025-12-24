@@ -12,7 +12,7 @@
 #include <Network/Network.h>
 #include <CoreFoundation/CoreFoundation.h>
 #include <SystemConfiguration/SystemConfiguration.h>
-#include "/Users/dimaeremin/kryosette-servers/bridge/transparent/level2/src/detectors/core/include/core.h"
+#include "/Users/dimaeremin/kryosette-servers/bridge/transparent/level2/src/detectors/core/include/core_darwin.h"
 #include <stdbool.h>
 
 static const uint32_t CAM_MAGIC_NUMBER = 0xC4D3F00D; 
@@ -317,6 +317,7 @@ mib[5]	0	Interface Index	A wildcard index (0) indicating that information for al
        };
     */
     struct if_msghdr *ifhdr = {0};
+    smemset(&ifhdr, 0, sizeof(ifhdr));
 
     for (next = buf; next < buf + len; next += ifhdr->ifm_msglen) {
         ifhdr = (struct if_msghdr *)next;
@@ -350,15 +351,17 @@ The Berkeley Packet Filter provides a raw interface to data link	layers
 static int create_bpf_socket(const char *interface) {
     int bpf_fd = -1;
     struct ifreq ifr;
-    memset(&ifr, 0, sizeof(ifr));
+    smemset(&ifr, 0, sizeof(ifr));
     /*
     stat, fstat, lstat, fstatat - get file status
     */
-    struct stat st;
+    struct stat st = {0};
+    smemset(&st, 0, sizeof(st));
 
     // Open the next available BPF device
     for (int i = 0; i < 128; i++) {
-        char bpf_dev[32];
+        char bpf_dev[32] = {0};
+        smemset(&bpf_dev, 0, sizeof(bpf_dev));
         // The packet filter appears as a character	special	device,	/dev/bpf.
         /*
         int snprintf(char* buffer, size_t buf_size, const char* format, ...);
@@ -425,6 +428,7 @@ static int create_bpf_socket(const char *interface) {
     */
     strlcpy(ifr.ifr_name, interface, sizeof(ifr.ifr_name));
 
+    // sock_dgram is deprecated | warning
     int test_sock = socket(AF_INET6, SOCK_DGRAM, 0);
     if (test_sock >= 0) {
         // warning
@@ -505,6 +509,7 @@ static int create_bpf_socket(const char *interface) {
 
 static int block_ip(const char *ip) {
     char cmd[256] = {0};
+    smemset(&cmd, 0, sizeof(cmd));
 }
 
 static const char* get_cam_table_path_safe(void) {
@@ -654,7 +659,8 @@ static bool create_dir_safe(const char *dir_path) {
             char original_pointer = *(slash_pointer);
             *(slash_pointer) = '\0';   
 
-            // only 
+            // only me
+            // warning
             mkdir(copy_dir_path, 0700);
 
             *(slash_pointer) = original_pointer;
@@ -662,6 +668,7 @@ static bool create_dir_safe(const char *dir_path) {
         dir_components_copy += 1;
     }
 
+    // warning
     if (strlen(copy_dir_path) > 0) {
         mkdir(copy_dir_path, 0700);
     }
@@ -1962,6 +1969,7 @@ void unblock_device(const char *ip, const uint8_t *mac,
 void block_ip(const char *ip, const uint8_t *mac, const char *reason, int duration)
 {
     char command[512] = {0};
+    smemset(&command, 0, sizeof(command));
 
     int written = snprintf("→ L2 BLOCK MAC: %02X:%02X:%02X:%02X:%02X:%02X | IP: %s | Reason: %s\n",
            mac[0], mac[1], mac[2], mac[3], mac[4], mac[5], (ip ? ip : (null)), (reason ? reason : (null)));
