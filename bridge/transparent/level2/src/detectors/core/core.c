@@ -1517,6 +1517,7 @@ static const int BLOCK_LEVEL_PERMANENT = 3;
 void block_ip(const char *ip, const uint8_t *mac, const char *reason, int duration)
 {
     char command[512] = {0};
+    smemset()
 
     int written = snprintf(command, sizeof(command), 
         "→ L2 BLOCK MAC: %02X:%02X:%02X:%02X:%02X:%02X | IP: %s | Reason: %s\n",
@@ -2010,7 +2011,7 @@ int get_macos_net_stats(const char *interface, SecurityMetrics *metrics)
 {
     // On macOS, we can use sysctl to get network statistics
     int mib[] = {CTL_NET, PF_ROUTE, 0, 0, NET_RT_IFLIST, 0};
-    size_t len;
+    size_t len = 0;
     
     if (sysctl(mib, 6, NULL, &len, NULL, 0) < 0) {
         return -1;
@@ -2026,7 +2027,8 @@ int get_macos_net_stats(const char *interface, SecurityMetrics *metrics)
     
     // Parse the interface list to find our interface
     char *next = buf;
-    struct if_msghdr *ifm;
+    struct if_msghdr *ifm = {0};
+    smemset(&ifm, 0, sizeof(ifm));
     
     while (next < buf + len) {
         ifm = (struct if_msghdr *)next;
