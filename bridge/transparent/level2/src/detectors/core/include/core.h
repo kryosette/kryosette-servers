@@ -1,8 +1,5 @@
 #pragma once
 
-#define _GNU_SOURCE
-#define __USE_MISC
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -16,30 +13,84 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <sys/ioctl.h>
+#include <sys/kern_control.h>
+#include <sys/sysctl.h>
 #include <fcntl.h>
 
 #include <netdb.h>
+#include <ifaddrs.h>
 
 #include <netinet/in.h>
 #include <netinet/ip.h>
 #include <netinet/tcp.h>
 #include <netinet/udp.h>
-#include <netinet/if_ether.h>
+#include <netinet/ip_icmp.h>
 
 #include <net/if.h>
+#include <net/if_dl.h>
 #include <net/ethernet.h>
+#include <net/route.h>
 #include <arpa/inet.h>
 
-#include <linux/if_packet.h>
-#include <linux/if_ether.h>
+#include <net/bpf.h>
+#include <net/if_types.h>
+#include <net/if_media.h>
 
-#ifdef __linux__
-#include <sys/file.h>
-#else
-#include <sys/fcntl.h>
-#endif
+#include <CoreFoundation/CoreFoundation.h>
+#include <SystemConfiguration/SystemConfiguration.h>
 
 #include <time.h>
+#include <dispatch/dispatch.h>
+
+#include "/Users/dimaeremin/kryosette-servers-macos/bridge/transparent/level2/src/ethernet/fdb/core/cam_table/include/cam_table_operations.h"
+
+/* macOS compatibility defines */
+#ifndef ETH_P_ALL
+#define ETH_P_ALL 0x0003
+#endif
+
+#ifndef ETH_P_IP
+#define ETH_P_IP 0x0800
+#endif
+
+#ifndef ETH_P_ARP
+#define ETH_P_ARP 0x0806
+#endif
+
+#ifndef ETH_P_IPV6
+#define ETH_P_IPV6 0x86DD
+#endif
+
+/* Ethernet header structure for macOS */
+struct ethhdr {
+    unsigned char h_dest[6];
+    unsigned char h_source[6];
+    unsigned short h_proto;
+};
+
+/* Linux compatibility defines */
+#define AF_PACKET PF_PACKET
+#define SOL_PACKET 0
+#define PACKET_ADD_MEMBERSHIP 1
+#define PACKET_DROP_MEMBERSHIP 2
+#define PACKET_MR_PROMISC 1
+
+struct packet_mreq {
+    int mr_ifindex;
+    unsigned short mr_type;
+    unsigned short mr_alen;
+    unsigned char mr_address[8];
+};
+
+/* Network statistics structure for macOS */
+struct net_stat {
+    unsigned long rx_packets;
+    unsigned long tx_packets;
+    unsigned long rx_bytes;
+    unsigned long tx_bytes;
+    unsigned long rx_errors;
+    unsigned long tx_errors;
+};
 
 static inline void msleep(int milliseconds)
 {
@@ -49,8 +100,6 @@ static inline void msleep(int milliseconds)
     nanosleep(&ts, NULL);
 }
 
-#include "/mnt/c/Users/dmako/kryosette/kryosette-servers/bridge/transparent/level2/src/ethernet/fdb/core/cam_table/include/cam_table_operations.h"
-
 // ===== GLOBAL VARIABLES =====
 extern volatile sig_atomic_t stop_monitoring;
 
@@ -59,10 +108,16 @@ extern volatile sig_atomic_t stop_monitoring;
 #define CAM_VERSION 1           /* CAM file format version */
 #define DEFAULT_CAPACITY 256000 /* Default capacity for CAM table entries */
 
-// ===== BLOCKING LEVELS =====
-#define BLOCK_LEVEL_PENDING 1
-#define BLOCK_LEVEL_HARD 2
-#define BLOCK_LEVEL_PERMANENT 3
+// // ===== BLOCKING LEVELS =====
+// #define BLOCK_LEVEL_PENDING 1
+// #define BLOCK_LEVEL_HARD 2
+// #define BLOCK_LEVEL_PERMANENT 3
+
+// ===== ENTRY STATUS =====
+#define ENTRY_STATUS_FREE 0
+#define ENTRY_STATUS_PENDING 1
+#define ENTRY_STATUS_BLOCKED 2
+#define ENTRY_STATUS_TRUSTED 3
 
 // ===== CAM FILE STRUCTURES =====
 #pragma pack(push, 1)
@@ -140,15 +195,6 @@ typedef struct
 #pragma pack(pop)
 
 // ===== STRUCTURES =====
-/**
- * struct ip_mac_mapping_t - IP to MAC address mapping
- * @ip: IP address in string format
- * @mac: corresponding MAC address
- * @last_seen: last time this mapping was observed
- * @block_count: number of times this IP was blocked
- *
- * Maintains dynamic mapping between IP and MAC addresses.
- */
 typedef struct
 {
     char ip[16];
@@ -157,16 +203,6 @@ typedef struct
     int block_count;
 } ip_mac_mapping_t;
 
-/**
- * struct blocked_ip_t - Blocked IP address entry
- * @ip: blocked IP address
- * @mac: corresponding MAC address
- * @block_time: when block was initiated
- * @block_duration: duration of block in seconds
- * @reason: reason for blocking
- *
- * Represents an actively blocked IP address with metadata.
- */
 typedef struct
 {
     char ip[16];
@@ -277,243 +313,67 @@ typedef struct
 } anomaly_detector_t;
 
 // ===== FUNCTION DECLARATIONS =====
-/**
- * handle_signal - Signal handler for graceful shutdown
- * @sig: signal number received
- *
- * Handles termination signals to stop monitoring gracefully.
- * Sets global stop_monitoring flag when called.
- */
 void handle_signal(int sig);
+void handle_usr1(int sig);
 
-/**
- * init_detector - Initialize anomaly detector instance
- * @detector: detector instance to initialize
- * @cam_manager: CAM table manager to associate
- *
- * Initializes all detector fields, mutexes, and associates CAM manager.
- * Must be called before using detector instance.
- */
+// ===== DETECTOR FUNCTIONS =====
 void init_detector(anomaly_detector_t *detector, cam_table_manager_t *cam_manager);
-
-/**
- * block_ip - Block IP address with specified parameters
- * @ip: IP address to block (string format)
- * @mac: corresponding MAC address to block
- * @reason: reason for blocking
- * @duration: block duration in seconds
- *
- * Blocks specified IP/MAC combination and updates CAM table.
- * Thread-safe operation.
- */
 void block_ip(const char *ip, const uint8_t *mac, const char *reason, int duration);
-
-/**
- * unblock_ip - Remove IP address block
- * @ip: IP address to unblock
- *
- * Removes blocking for specified IP and updates CAM table.
- * Thread-safe operation.
- */
 void unblock_ip(const char *ip);
-
-/**
- * add_to_block_list - Add IP to detector's block list
- * @detector: anomaly detector instance
- * @ip: IP address to block
- * @mac: MAC address to block
- * @reason: reason for blocking
- *
- * Adds IP/MAC to detector's internal block list with current timestamp.
- * Caller must hold appropriate mutexes.
- */
 void add_to_block_list(anomaly_detector_t *detector, const char *ip, const uint8_t *mac, const char *reason);
-
-/**
- * check_block_expiry - Check and remove expired blocks
- * @detector: anomaly detector instance
- *
- * Scans blocked IPs list and removes entries whose block duration has expired.
- * Automatically updates CAM table when unblocking.
- */
 void check_block_expiry(anomaly_detector_t *detector);
 
-/**
- * extract_attacker_ip - Extract attacker IP from packet
- * @packet: network packet buffer
- * @ip_buffer: output buffer for IP address (must be 16 bytes)
- *
- * Parses network packet and extracts source IP address.
- * Supports IPv4 packets. Buffer must be pre-allocated.
- */
+// ===== PACKET PROCESSING =====
 void extract_attacker_ip(const unsigned char *packet, char *ip_buffer);
-
-/**
- * extract_attacker_mac - Extract attacker MAC from packet
- * @packet: network packet buffer
- * @mac_buffer: output buffer for MAC address (6 bytes)
- *
- * Extracts source MAC address from Ethernet frame.
- * Buffer must be pre-allocated with 6 bytes minimum.
- */
 void extract_attacker_mac(const unsigned char *packet, uint8_t *mac_buffer);
 
-/**
- * get_proc_net_stats - Read network statistics from procfs
- * @interface: network interface name
- * @metrics: SecurityMetrics structure to populate
- *
- * Returns: 0 on success, -1 on error
- *
- * Reads current network interface statistics from /proc/net/dev
- * and populates the provided metrics structure.
- */
-int get_proc_net_stats(const char *interface, SecurityMetrics *metrics);
-
-/**
- * create_raw_socket - Create raw socket for packet capture
- *
- * Returns: socket file descriptor on success, -1 on error
- *
- * Creates raw socket suitable for packet capture and analysis.
- * Socket is configured for promiscuous mode and packet headers.
- */
-int create_raw_socket();
-
-/**
- * analyze_packet - Analyze network packet for security threats
- * @packet: packet data buffer
- * @length: packet length in bytes
- * @metrics: SecurityMetrics to update
- *
- * Parses network packet, updates security metrics, and detects
- * potential attacks based on packet contents and patterns.
- */
+// ===== NETWORK STATISTICS (macOS specific) =====
+int get_macos_net_stats(const char *interface, SecurityMetrics *metrics);
+static int create_bpf_socket(const char *interface);
 void analyze_packet(const unsigned char *packet, int length, SecurityMetrics *metrics);
-
-/**
- * calculate_baseline - Calculate baseline security metrics
- * @detector: anomaly detector instance
- *
- * Establishes baseline network behavior by analyzing current metrics.
- * Used as reference for future anomaly detection.
- */
 void calculate_baseline(anomaly_detector_t *detector);
-
-/**
- * detect_anomalies - Detect security anomalies from current metrics
- * @detector: anomaly detector instance
- *
- * Returns: anomaly score (0-100) indicating threat level
- *
- * Compares current metrics against baseline to detect anomalies.
- * Higher scores indicate greater deviation from normal behavior.
- */
 int detect_anomalies(anomaly_detector_t *detector);
-
-/**
- * print_blocked_ips - Display currently blocked IP addresses
- * @detector: anomaly detector instance
- *
- * Prints formatted list of all currently blocked IP addresses
- * with their metadata to standard output.
- */
 void print_blocked_ips(anomaly_detector_t *detector);
-
-/**
- * update_ip_mac_mapping - Update IP to MAC address mapping
- * @detector: anomaly detector instance
- * @ip: IP address to map
- * @mac: MAC address to associate
- *
- * Maintains dynamic mapping between IP and MAC addresses.
- * Updates last_seen timestamp for existing entries.
- */
 void update_ip_mac_mapping(anomaly_detector_t *detector, const char *ip, const uint8_t *mac);
-
-/**
- * find_mac_by_ip - Find MAC address by IP address
- * @detector: anomaly detector instance
- * @ip: IP address to search for
- *
- * Returns: pointer to MAC address if found, NULL otherwise
- *
- * Searches IP-MAC mapping table for specified IP address.
- * Returns corresponding MAC address if mapping exists.
- */
 uint8_t *find_mac_by_ip(anomaly_detector_t *detector, const char *ip);
-
-/**
- * security_handle_attack_detection - Handle detected security attack
- * @detector: anomaly detector instance
- * @threat_level: calculated threat level (0-100)
- *
- * Implements security response based on threat level.
- * May trigger blocking, logging, or alerting actions.
- */
 void security_handle_attack_detection(anomaly_detector_t *detector, int threat_level);
 
-/**
- * start_comprehensive_monitoring - Start comprehensive network monitoring
- * @interface: network interface to monitor
- * @cam_manager: CAM table manager instance
- *
- * Main monitoring loop. Captures packets, analyzes traffic,
- * detects anomalies, and manages security responses.
- * Runs until termination signal received.
- */
+// ===== MAIN MONITORING FUNCTION =====
 void start_comprehensive_monitoring(const char *interface, cam_table_manager_t *cam_manager);
 
-/* CAM table functions */
-/**
- * cam_table_block_mac - Block MAC address in CAM table
- * @manager: CAM table manager instance
- * @mac_bytes: MAC address to block
- * @vlan_id: VLAN identifier
- * @reason: reason for blocking
- *
- * Returns: 0 on success, negative error code on failure
- *
- * Adds MAC address to CAM table with blocked status.
- * Persists blocking reason and updates table statistics.
- */
+// ===== CAM TABLE FUNCTIONS =====
 int cam_table_block_mac(cam_table_manager_t *manager, const uint8_t *mac_bytes, uint16_t vlan_id, const char *reason);
-
-/**
- * cam_table_unblock_mac - Unblock MAC address in CAM table
- * @manager: CAM table manager instance
- * @mac_bytes: MAC address to unblock
- * @vlan_id: VLAN identifier
- *
- * Returns: 0 on success, negative error code on failure
- *
- * Removes blocked status from MAC address in CAM table.
- * Updates table statistics and maintains audit trail.
- */
 int cam_table_unblock_mac(cam_table_manager_t *manager, const uint8_t *mac_bytes, uint16_t vlan_id);
-
-/**
- * cam_table_set_mac_pending - Set MAC address to pending status
- * @manager: CAM table manager instance
- * @mac_bytes: MAC address to modify
- * @vlan_id: VLAN identifier
- * @reason: reason for pending status
- *
- * Returns: 0 on success, negative error code on failure
- *
- * Sets MAC address to pending status for further analysis.
- * Typically used for suspicious but not confirmed malicious addresses.
- */
 int cam_table_set_mac_pending(cam_table_manager_t *manager, const uint8_t *mac_bytes, uint16_t vlan_id, const char *reason);
 
+// ===== BLOCKING LEVEL FUNCTIONS =====
 void apply_blocking_by_level(const char *ip, const uint8_t *mac, int block_level, const char *reason);
 void remove_blocking_by_level(const char *ip, const uint8_t *mac, int block_level);
+
+// ===== UTILITY FUNCTIONS =====
 void print_cam_table();
 int is_mac_blocked(const uint8_t *mac_bytes);
-void handle_usr1(int sig);
 void send_ban_to_social_network(const char *ip, const uint8_t *mac,
                                 const char *reason, int duration,
                                 int ban_level);
-static void add_attr(struct nlmsghdr *nlh, int maxlen, int type, 
+
+// ===== macOS-SPECIFIC NETLINK FUNCTIONS =====
+static void add_attr(void *nlh, int maxlen, int type, 
                      const void *data, int datalen);
+
 static int send_netlink_socket(int type, const char *data, size_t len);
+
+// ===== PLATFORM-SPECIFIC MACROS =====
+/* Use get_macos_net_stats for macOS instead of get_proc_net_stats */
+#ifdef __APPLE__
+#define get_net_stats get_macos_net_stats
+#else
+#define get_net_stats get_proc_net_stats
+#endif
+
+/* Platform-specific socket creation */
+#ifdef __APPLE__
+#define create_platform_socket(iface) create_bpf_socket(iface)
+#else
+#define create_platform_socket(iface) create_raw_socket()
+#endif
