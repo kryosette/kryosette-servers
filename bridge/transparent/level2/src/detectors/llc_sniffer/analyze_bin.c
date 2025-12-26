@@ -44,8 +44,10 @@ void analyze_bin_file(const char *filename) {
         printf(" DSAP: 0x%02X, SSAP: 0x%02X, Ctrl: 0x%02X\n", 
                pkt_hdr.dsap, pkt_hdr.ssap, pkt_hdr.control);
 
+        // warning, why offset + 4?
         fseek(file, pkt_hdr.llc_offset + 4, SEEK_CUR);
     }
 
-
+    free(packet);
+    flose(file);
 }
