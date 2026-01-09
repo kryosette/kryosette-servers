@@ -199,6 +199,10 @@ int parse_eth_frame(const uint8_t *packet, size_t len, PacketHeader *pkt_hdr, ui
     EtherType 0x9100 is a non-standard, but commonly supported, value used in QinQ (802.1ad) VLAN tagging for the outer VLAN tag (S-VLAN), 
     often as a LEGACY or alternative to the standard 0x88A8 to enable interoperability with different vendors' equipment, especially in Service Provider networks. 
     It identifies Ethernet frames carrying double VLAN tags, allowing service providers to carry customer VLANs over their network without conflict. 
+    
+    1500 decimal—basic frames (see 1.4.207)
+    1504 decimal—Q-tagged frames (see 1.4.494)
+    1982 decimal—envelope frames (see 1.4.310)
     */
     if (ethertype == 0x86DD|| ethertype == 0x88A8) {
         // VLAN tagged frame
@@ -223,6 +227,15 @@ Ethernet II	≥ 1536	Any
 Novell raw IEEE 802.3	≤ 1500	0xFFFF
 IEEE 802.2 LLC	≤ 1500	Other
 IEEE 802.2 SNAP	≤ 1500	0xAAAA
+
+a) If the value of this field is less than or equal to 1500 decimal (05DC hexadecimal), then the Length/
+Type field indicates the number of MAC client data octets contained in the subsequent MAC Client
+Data field of the basic frame (Length interpretation).
+b) If the value of this field is greater than or equal to 1536 decimal (0600 hexadecimal), then the
+Length/Type field indicates the EtherType of the MAC client protocol (Type interpretation).34
+The Length and Type interpretations of this field are mutually exclusive.
+When used as a Type field, it is the responsibility of the MAC client to ensure that the MAC client
+operates properly when the MAC sublayer pads the supplied MAC Client data, as discussed in 3.2.7.
     */
     if (ethertype > 1500 && ethertype != 0xAAAA || ethertype != 0xAAAA) {
         return -1; // this is not LLC, maybe IP 

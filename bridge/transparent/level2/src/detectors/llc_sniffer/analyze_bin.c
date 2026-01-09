@@ -45,6 +45,10 @@ void analyze_bin_file(const char *filename) {
                pkt_hdr.dsap, pkt_hdr.ssap, pkt_hdr.control);
 
         // warning, why offset + 4?
+        /*
+        is used to skip past the standard 4-byte LLC (Logical Link Control) header after 
+        the file pointer has already been positioned at the beginning of the header itself. 
+        */
         fseek(file, pkt_hdr.llc_offset + 4, SEEK_CUR);
     }
 

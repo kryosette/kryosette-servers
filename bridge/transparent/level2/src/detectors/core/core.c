@@ -41,25 +41,25 @@ struct nlattr {
     uint16_t nla_type;
 };
 
-// IP header structure for macOS
-struct iphdr {
-#if __BYTE_ORDER == __LITTLE_ENDIAN
-    unsigned int ihl:4;
-    unsigned int version:4;
-#else
-    unsigned int version:4;
-    unsigned int ihl:4;
-#endif
-    uint8_t tos;
-    uint16_t tot_len;
-    uint16_t id;
-    uint16_t frag_off;
-    uint8_t ttl;
-    uint8_t protocol;
-    uint16_t check;
-    uint32_t saddr;
-    uint32_t daddr;
-};
+// // IP header structure for macOS
+// struct iphdr {
+// #if __BYTE_ORDER == __LITTLE_ENDIAN
+//     unsigned int ihl:4;
+//     unsigned int version:4;
+// #else
+//     unsigned int version:4;
+//     unsigned int ihl:4;
+// #endif
+//     uint8_t tos;
+//     uint16_t tot_len;
+//     uint16_t id;
+//     uint16_t frag_off;
+//     uint8_t ttl;
+//     uint8_t protocol;
+//     uint16_t check;
+//     uint32_t saddr;
+//     uint32_t daddr;
+// };
 
 static int is_file_header_valid(const cam_file_header_t* header) {
     if (header == NULL) {
@@ -198,219 +198,220 @@ static int is_file_entry_valid(const cam_file_entry_t* entry, uint32_t index) {
     return 1;
 }
 
-static int create_osx_system_socket(void) {
-    int sock = socket(AF_INET6, SOCK_DGRAM, 0);
-    if (sock < 0) return -1;
+// static int create_osx_system_socket(void) {
+//     int sock = socket(AF_INET6, SOCK_DGRAM, 0);
+//     if (sock < 0) return -1;
 
-    int flags = fcntl(sock, F_GETFL, 0);
-    fcntl(sock, F_SETFL, flags | O_NONBLOCK);
+//     int flags = fcntl(sock, F_GETFL, 0);
+//     fcntl(sock, F_SETFL, flags | O_NONBLOCK);
 
-    return sock;
-}
+//     return sock;
+// }
 
-static int get_kernel_control_id(const char *control_name) {
-    struct ctl_info ctl;
-    smemset(&ctl, 0, sizeof(ctl));
+// static int get_kernel_control_id(const char *control_name) {
+//     struct ctl_info ctl;
+//     smemset(&ctl, 0, sizeof(ctl));
     
-    strlcpy(ctl.ctl_name, control_name, sizeof(ctl.ctl_name));
+//     strlcpy(ctl.ctl_name, control_name, sizeof(ctl.ctl_name));
 
-    int sock = socket(AF_INET6, SOCK_DGRAM, 0);
-    if (sock < 0) return -1;
+//     int sock = socket(AF_INET6, SOCK_DGRAM, 0);
+//     if (sock < 0) return -1;
 
-    if (ioctl(sock, CTLIOCGINFO, &ctl) < 0) {
-        close(sock);
-        return -1;
-    }
+//     if (ioctl(sock, CTLIOCGINFO, &ctl) < 0) {
+//         close(sock);
+//         return -1;
+//     }
 
-    close(sock);
-    return ctl.ctl_id;
-}
+//     close(sock);
+//     return ctl.ctl_id;
+// }
 
-static int connect_to_kernel_control(int sockfd, const char *control_name) {
-    struct sockaddr_ctl sock_ctl;
-    smemset(&sock_ctl, 0, sizeof(sock_ctl));
+// static int connect_to_kernel_control(int sockfd, const char *control_name) {
+//     struct sockaddr_ctl sock_ctl;
+//     smemset(&sock_ctl, 0, sizeof(sock_ctl));
 
-    int ctl_id = -1;
-    ctl_id = get_kernel_control_id(control_name);
-    if (ctl_id < 0) {
-        ctl_id = get_kernel_control_id("com.apple.network.statistics");
-    }
-    if (ctl_id < 0) {
-        ctl_id = get_kernel_control_id("com.apple.network.advisory");
-    }
-    if (ctl_id < 0) return -1;
+//     int ctl_id = -1;
+//     ctl_id = get_kernel_control_id(control_name);
+//     if (ctl_id < 0) {
+//         ctl_id = get_kernel_control_id("com.apple.network.statistics");
+//     }
+//     if (ctl_id < 0) {
+//         ctl_id = get_kernel_control_id("com.apple.network.advisory");
+//     }
+//     if (ctl_id < 0) return -1;
 
-    sock_ctl.sc_family = AF_SYSTEM;
-    sock_ctl.sc_id = ctl_id;
-    sock_ctl.sc_len = sizeof(sock_ctl); 
-    sock_ctl.sc_unit = 0;
-    // sock_ctl.ss_sysaddr = SYSPROTO_CONTROL;
+//     sock_ctl.sc_family = AF_SYSTEM;
+//     sock_ctl.sc_id = ctl_id;
+//     sock_ctl.sc_len = sizeof(sock_ctl); 
+//     sock_ctl.sc_unit = 0;
+//     // sock_ctl.ss_sysaddr = SYSPROTO_CONTROL;
 
-    sock_ctl.sc_reserved[0] = 0;
-    sock_ctl.sc_reserved[1] = 0;
-    sock_ctl.sc_reserved[2] = 0;
-    sock_ctl.sc_reserved[3] = 0;
-    sock_ctl.sc_reserved[4] = 0;
+//     sock_ctl.sc_reserved[0] = 0;
+//     sock_ctl.sc_reserved[1] = 0;
+//     sock_ctl.sc_reserved[2] = 0;
+//     sock_ctl.sc_reserved[3] = 0;
+//     sock_ctl.sc_reserved[4] = 0;
 
-    if (connect(sockfd, (struct sockaddr *)&sock_ctl, sizeof(sock_ctl)) < 0) {
-        perror("connect err");
-        return -1;
-    }
+//     if (connect(sockfd, (struct sockaddr *)&sock_ctl, sizeof(sock_ctl)) < 0) {
+//         perror("connect err");
+//         return -1;
+//     }
 
-    return 0;
-}
+//     return 0;
+// }
 
-static int create_osx_route_socket(void) {
-    int r_sock = socket(PF_ROUTE, SOCK_RAW, AF_UNSPEC);
-    if (r_sock < 0) {
-        perror("route socket err");
-        return -1;
-    }
+// static int create_osx_route_socket(void) {
+//     int r_sock = socket(PF_ROUTE, SOCK_RAW, AF_UNSPEC);
+//     if (r_sock < 0) {
+//         perror("route socket err");
+//         return -1;
+//     }
 
-    int flags = fcntl(r_sock, F_GETFL, 0);
-    fcntl(r_sock, F_SETFL, flags | O_NONBLOCK);
+//     int flags = fcntl(r_sock, F_GETFL, 0);
+//     fcntl(r_sock, F_SETFL, flags | O_NONBLOCK);
 
-    return r_sock;
-}
+//     return r_sock;
+// }
 
-static int get_interface_info_osx(void) {
-    int mib[6] = {CTL_NET, PF_ROUTE, 0, 0, NET_RT_IFLIST, 0};
-    size_t len = 0;
+// static int get_interface_info_osx(void) {
+//     int mib[6] = {CTL_NET, PF_ROUTE, 0, 0, NET_RT_IFLIST, 0};
+//     size_t len = 0;
 
-    if (sysctl(mib, 6, NULL, &len, NULL, 0) < 0) {
-        perror("sysctl err");
-        return -1;
-    }
+//     if (sysctl(mib, 6, NULL, &len, NULL, 0) < 0) {
+//         perror("sysctl err");
+//         return -1;
+//     }
 
-    char *buf = calloc(1, len);
-    if (!buf) return -1;
+//     char *buf = calloc(1, len);
+//     if (!buf) return -1;
 
-    if (sysctl(mib, 6, buf, &len, NULL, 0) < 0) {
-        perror("sysctl err buf");
-        free(buf);
-        return -1;
-    }
+//     if (sysctl(mib, 6, buf, &len, NULL, 0) < 0) {
+//         perror("sysctl err buf");
+//         free(buf);
+//         return -1;
+//     }
 
-    char *next = buf;
-    struct if_msghdr *ifhdr = NULL;
+//     char *next = buf;
+//     struct if_msghdr *ifhdr = NULL;
 
-    for (next = buf; next < buf + len; next += ifhdr->ifm_msglen) {
-        ifhdr = (struct if_msghdr *)next;
-        if (ifhdr->ifm_type == RTM_IFINFO) {
-            struct sockaddr_dl *sdl = (struct sockaddr_dl *)(ifhdr + 1);
-            printf("Interface: %.*s\n", sdl->sdl_nlen, sdl->sdl_data);
-            printf(" Index: %d\n", ifhdr->ifm_index);
-            printf(" Flags: 0x%x\n", ifhdr->ifm_flags);
-            printf(" MAC: ");
-            if (sdl->sdl_alen > 0) {
-                unsigned char *mac = (unsigned char *)LLADDR(sdl);
-                for (int i = 0; i < sdl->sdl_alen; i++) {
-                    printf("%02X%s", mac[i], (i == sdl->sdl_alen - 1) ? "\n" : ":");
-                }
-            } else {
-                printf("N/A\n");
-            }
-        }
-    }
+//     for (next = buf; next < buf + len; next += ifhdr->ifm_msglen) {
+//         ifhdr = (struct if_msghdr *)next;
+//         if (ifhdr->ifm_type == RTM_IFINFO) {
+//             struct sockaddr_dl *sdl = (struct sockaddr_dl *)(ifhdr + 1);
+//             printf("Interface: %.*s\n", sdl->sdl_nlen, sdl->sdl_data);
+//             printf(" Index: %d\n", ifhdr->ifm_index);
+//             printf(" Flags: 0x%x\n", ifhdr->ifm_flags);
+//             printf(" MAC: ");
+//             if (sdl->sdl_alen > 0) {
+//                 unsigned char *mac = (unsigned char *)LLADDR(sdl);
+//                 for (int i = 0; i < sdl->sdl_alen; i++) {
+//                     printf("%02X%s", mac[i], (i == sdl->sdl_alen - 1) ? "\n" : ":");
+//                 }
+//             } else {
+//                 printf("N/A\n");
+//             }
+//         }
+//     }
 
-    free(buf);
-    return 0;
-}
+//     free(buf);
+//     return 0;
+// }
 
-static int create_bpf_socket(const char *interface) {
-    int bpf_fd = -1;
-    struct ifreq ifr;
-    memset(&ifr, 0, sizeof(ifr));
-    struct stat st;
+// static int create_bpf_socket(const char *interface) {
+//     int bpf_fd = -1;
+//     struct ifreq ifr;
+//     memset(&ifr, 0, sizeof(ifr));
+//     struct stat st;
 
-    for (int i = 0; i < 128; i++) {
-        char bpf_dev[32];
-        snprintf(bpf_dev, sizeof(bpf_dev), "/dev/bpf%d", i);
+//     for (int i = 0; i < 128; i++) {
+//         char bpf_dev[32];
+//         snprintf(bpf_dev, sizeof(bpf_dev), "/dev/bpf%d", i);
 
-        if (stat(bpf_dev, &st) < 0) {
-            perror("bpf device not found!");
-            return -1;
-        }
+//         if (stat(bpf_dev, &st) < 0) {
+//             perror("bpf device not found!");
+//             return -1;
+//         }
 
-        if (!(st.st_mode & S_IRUSR) || !(st.st_mode & S_IWUSR)) {
-            fprintf(stderr, "BPF device %s has wrong permissions: %o\n", 
-                    bpf_dev, st.st_mode & 0700);
-            return -1;
-        }
+//         if (!(st.st_mode & S_IRUSR) || !(st.st_mode & S_IWUSR)) {
+//             fprintf(stderr, "BPF device %s has wrong permissions: %o\n", 
+//                     bpf_dev, st.st_mode & 0700);
+//             return -1;
+//         }
 
-        if (!S_ISCHR(st.st_mode)) {
-            fprintf(stderr, "%s is not a character device\n", bpf_dev);
-            return -1;
-        }
+//         if (!S_ISCHR(st.st_mode)) {
+//             fprintf(stderr, "%s is not a character device\n", bpf_dev);
+//             return -1;
+//         }
 
-        bpf_fd = open(bpf_dev, O_RDWR | O_CLOEXEC);
+//         bpf_fd = open(bpf_dev, O_RDWR | O_CLOEXEC);
 
-        if (bpf_fd >= 0) {
-            printf("Opened BPF device: %s\n", bpf_dev);
-            break;
-        }
-    }
+//         if (bpf_fd >= 0) {
+//             printf("Opened BPF device: %s\n", bpf_dev);
+//             break;
+//         }
+//     }
 
-    if (bpf_fd < 0) {
-        if (errno == ENOENT || errno == 0) {
-            fprintf(stderr, "No BPF devices found in /dev/bpf*\n");
-        } else if (errno == EBUSY) {
-            fprintf(stderr, "All BPF devices are busy\n");
-            fprintf(stderr, "Close other packet sniffers (tcpdump, Wireshark)\n");
-        }
-        return -1;
-    }
+//     if (bpf_fd < 0) {
+//         if (errno == ENOENT || errno == 0) {
+//             fprintf(stderr, "No BPF devices found in /dev/bpf*\n");
+//         } else if (errno == EBUSY) {
+//             fprintf(stderr, "All BPF devices are busy\n");
+//             fprintf(stderr, "Close other packet sniffers (tcpdump, Wireshark)\n");
+//         }
+//         return -1;
+//     }
 
-    strlcpy(ifr.ifr_name, interface, sizeof(ifr.ifr_name));
+//     strlcpy(ifr.ifr_name, interface, sizeof(ifr.ifr_name));
 
-    int test_sock = socket(AF_INET6, SOCK_DGRAM, 0);
-    if (test_sock >= 0) {
-        if (ioctl(test_sock, SIOCGIFFLAGS, &ifr) < 0) {
-            close(test_sock);
-            close(bpf_fd);
-            return -1;
-        }
-        close(test_sock);
-    }
+//     int test_sock = socket(AF_INET6, SOCK_DGRAM, 0);
+//     if (test_sock >= 0) {
+//         if (ioctl(test_sock, SIOCGIFFLAGS, &ifr) < 0) {
+//             close(test_sock);
+//             close(bpf_fd);
+//             return -1;
+//         }
+//         close(test_sock);
+//     }
 
-    if (ioctl(bpf_fd, BIOCSETIF, &ifr) < 0) {
-        if (errno == ENXIO) {
-            fprintf(stderr, "Interface '%s' not found\n", interface);
-            fprintf(stderr, "Available interfaces:\n");
+//     if (ioctl(bpf_fd, BIOCSETIF, &ifr) < 0) {
+//         if (errno == ENXIO) {
+//             fprintf(stderr, "Interface '%s' not found\n", interface);
+//             fprintf(stderr, "Available interfaces:\n");
             
-            struct ifaddrs *ifap, *ifa;
-            if (getifaddrs(&ifap) == 0) {
-                for (ifa = ifap; ifa != NULL; ifa = ifa->ifa_next) {
-                    if (ifa->ifa_addr && 
-                        ifa->ifa_addr->sa_family == AF_INET) {
-                        printf("  %s\n", ifa->ifa_name);
-                    }
-                }
-                freeifaddrs(ifap);
-            }
-        }
-        perror("BIOCSETIF failed");
-        close(bpf_fd);
-        return -1;
-    }
+//             struct ifaddrs *ifap, *ifa;
+//             if (getifaddrs(&ifap) == 0) {
+//                 for (ifa = ifap; ifa != NULL; ifa = ifa->ifa_next) {
+//                     if (ifa->ifa_addr && 
+//                         ifa->ifa_addr->sa_family == AF_INET) {
+//                         printf("  %s\n", ifa->ifa_name);
+//                     }
+//                 }
+//                 freeifaddrs(ifap);
+//             }
+//         }
+//         perror("BIOCSETIF failed");
+//         close(bpf_fd);
+//         return -1;
+//     }
 
-    return bpf_fd;
-}
+//     return bpf_fd;
+// }
 
-// Function to create raw socket for packet capture (macOS version)
-static int create_raw_socket(void) {
-    // Use BPF on macOS instead of AF_PACKET
-    return create_bpf_socket("en0");
-}
+// // Function to create raw socket for packet capture (macOS version)
+// static int create_raw_socket(void) {
+//     // Use BPF on macOS instead of AF_PACKET
+//     return create_bpf_socket("en0");
+// }
 
 static int block_ip_simple(const char *ip) {
     char cmd[256] = {0};
+    smemset(&cmd, 0, sizeof(cmd));
     snprintf(cmd, sizeof(cmd), "echo 'block in from %s to any' | pfctl -a cam_blocker -f - 2>&1", ip);
-    return system(cmd);
+    return system(cmd); // WARNING
 }
 
 static const char* get_cam_table_path_safe(void) {
-    static char path_buffer[MAX_PATH_LENGTH];
+    static char path_buffer[MAX_PATH_LENGTH] = {0};
     smemset(&path_buffer, 0, sizeof(path_buffer));
 
     const char *home = getenv("HOME");
@@ -422,7 +423,7 @@ static const char* get_cam_table_path_safe(void) {
 }
 
 static const char* get_cam_log_path_safe(void) {
-    static char log_path_buffer[MAX_PATH_LENGTH];
+    static char log_path_buffer[MAX_PATH_LENGTH] = {0};
     smemset(&log_path_buffer, 0, sizeof(log_path_buffer));
 
     const char *home = getenv("HOME");
@@ -444,14 +445,14 @@ static bool is_ip_address_valid(const char *ip_address) {
         return false;
     }
 
-    struct in6_addr addr6;
+    struct in6_addr addr6 = {0};
     smemset(&addr6, 0, sizeof(addr6));
 
     if (inet_pton(AF_INET6, ip_address, &addr6) == 1) {
         return true;
     }
     
-    struct in_addr addr4;
+    struct in_addr addr4 = {0};
     smemset(&addr4, 0, sizeof(addr4));
     
     if (inet_pton(AF_INET, ip_address, &addr4) == 1) {
@@ -484,7 +485,7 @@ static bool create_dir_safe(const char *dir_path) {
 
     size_t len = strlen(dir_path);
     char copy_dir_path[len + 1];
-    smemset(&copy_dir_path, 0, sizeof(copy_dir_path));
+    smemset(&copy_dir_path, 0, sizeof(copy_dir_path)); // WARNING
     strncpy(copy_dir_path, dir_path, len);
     copy_dir_path[len] = '\0';
 
@@ -496,7 +497,7 @@ static bool create_dir_safe(const char *dir_path) {
             char original_char = *slash_pointer;
             *slash_pointer = '\0';   
 
-            mkdir(copy_dir_path, 0700);
+            mkdir(copy_dir_path, 0700); // 0700 ONLY
 
             *slash_pointer = original_char;
         }
@@ -1159,9 +1160,10 @@ static int block_mac_in_file(const uint8_t *mac_bytes, uint16_t vlan_id, const c
         goto cleanup;
     }
 
-    cam_file_entry_t entry;
-    int found = 0;
+    cam_file_entry_t entry = {0}; 
+    smemset(&entry, 0, sizeof(entry));
 
+    int found = 0;
     for (uint32_t i = 0; i < header.total_entries; i++)
     {
         if (fread(&entry, sizeof(entry), 1, file) != 1)
@@ -1299,12 +1301,14 @@ int cam_table_unblock_mac(cam_table_manager_t *manager, const uint8_t *mac_bytes
     if (!file)
         return -1;
 
-    cam_file_header_t header;
+    cam_file_header_t header = {0};
+    smemset(&header, 0, sizeof(header));
     fread(&header, sizeof(header), 1, file);
 
-    cam_file_entry_t entry;
-    int found = 0;
+    cam_file_entry_t entry = {0};
+    smemset(&entry, 0, sizeof(entry));
 
+    int found = 0;
     for (uint32_t i = 0; i < header.total_entries; i++)
     {
         fread(&entry, sizeof(entry), 1, file);

@@ -103,7 +103,7 @@ static inline void msleep(int milliseconds)
 }
 
 /* Assuming this path is correct for your project */
-#include "/mnt/c/Users/dmako/kryosette/kryosette-servers/bridge/transparent/level2/src/ethernet/fdb/core/cam_table/include/cam_table_operations.h"
+#include "/Users/dimaeremin/kryosette-servers/bridge/transparent/level2/src/ethernet/fdb/core/cam_table/include/cam_table_operations.h"
 
 // ===== GLOBAL VARIABLES =====
 extern volatile sig_atomic_t stop_monitoring;

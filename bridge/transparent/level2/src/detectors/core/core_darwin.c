@@ -12,6 +12,7 @@
 #include <Network/Network.h>
 #include <CoreFoundation/CoreFoundation.h>
 #include <SystemConfiguration/SystemConfiguration.h>
+#include "/Users/dimaeremin/kryosette-servers/third-party/smemset/include/smemset.h"
 #include "/Users/dimaeremin/kryosette-servers/bridge/transparent/level2/src/detectors/core/include/core_darwin.h"
 #include <stdbool.h>
 
@@ -32,13 +33,13 @@ static int is_file_header_valid(const cam_file_header_t* header) {
         return 0;
     }
     
-    if (header->magic != CAM_MAGIC_NUMBER()) {
+    if (header->magic != CAM_MAGIC_NUMBER) {
         fprintf(stderr, "ОШИБКА ЦЕЛОСТНОСТИ: Неверное магическое число: 0x%08X\n", 
                 header->magic);
         return 0;
     }
     
-    if (header->version != CAM_VERSION_NUMBER()) {
+    if (header->version != CAM_VERSION_NUMBER) {
         fprintf(stderr, "ОШИБКА ЦЕЛОСТНОСТИ: Неподдерживаемая версия: 0x%04X\n", 
                 header->version);
         return 0;
@@ -141,7 +142,7 @@ static int is_file_entry_valid(const cam_file_entry_t* entry, uint32_t index) {
         }
         
         if (entry->status == ENTRY_STATUS_BLOCKED &&
-            strlen(entry->reason) > MAX_REASON_LENGTH()) {
+            strlen(entry->reason) > MAX_REASON_LENGTH) {
             fprintf(stderr, "ОШИБКА ЦЕЛОСТНОСТИ: Запись %u: слишком длинная причина\n", index);
             return 0;
         }
@@ -529,7 +530,7 @@ static const char* get_cam_table_path_safe(void) {
     return path_buffer;
 }
 
-static const char* get_cam_log_path_safe(void) {
+static const char *get_cam_log_path_safe(void) {
     static char log_path_buffer[MAX_PATH_LENGTH];
     smemset(&log_path_buffer, 0, sizeof(log_path_buffer));
 
@@ -636,7 +637,7 @@ static bool is_mac_address_valid(const uint8_t *mac_address) {
 static bool create_dir_safe(const char *dir_path) {
     if (dir_path == NULL) return false;
 
-    char copy_dir_path[dir_path] = {0};
+    char copy_dir_path[dir_path];
     smemset(&copy_dir_path, 0, sizeof(copy_dir_path));
     /*
     char *
@@ -784,8 +785,8 @@ static bool block_ip_secure(
                 return;
             }
             
-            file_header.magic = CAM_MAGIC_NUMBER();
-            file_header.version = CAM_VERSION_NUMBER();
+            file_header.magic = CAM_MAGIC_NUMBER;
+            file_header.version = CAM_VERSION_NUMBER;
             file_header.entry_size = sizeof(cam_file_entry_t);
             file_header.total_entries = 1000; 
             file_header.trusted_count = 0;

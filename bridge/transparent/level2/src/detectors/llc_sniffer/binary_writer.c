@@ -46,8 +46,8 @@ int read_binary_file(FILE *file, PacketHeader *hdr, uint8_t **packet, uint32_t *
                     FILE *restrict stream);
         
         The function fwrite() writes n items of data, each size bytes
-       long, to the stream pointed to by stream, obtaining them from the
-       location given by ptr.
+        long, to the stream pointed to by stream, obtaining them from the
+        location given by ptr.
         */
         if (fread(*packet, hdr->packet_len, 1, file) != 1) {
             return -1;
@@ -63,6 +63,4 @@ int read_binary_file(FILE *file, PacketHeader *hdr, uint8_t **packet, uint32_t *
 // void convert_to_pcap_file(const char *bin_file, const char *pcap_file) {
 //     FILE *bin = fopen(bin_file, "rb");
 //     FILE *pcap = fopen(pcap_file, "wb");
-
-
 // }
